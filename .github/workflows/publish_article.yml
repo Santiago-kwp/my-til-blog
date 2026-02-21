@@ -45,6 +45,7 @@ jobs:
           # 이미지 URL 변환을 위해 현재 레포 정보 전달
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
+          HASHNODE_BLOG_HOST: "itsantiago.hashnode.dev"
         run: |
           for file in ${{ steps.changed_files.outputs.all_changed_files }}; do
             echo ">> Processing $file..."

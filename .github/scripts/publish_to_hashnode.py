@@ -9,6 +9,23 @@ HASHNODE_PAT = os.getenv('HASHNODE_PAT')
 PUBLICATION_ID = os.getenv('HASHNODE_PUBLICATION_ID')
 GITHUB_REPO = os.getenv('GITHUB_REPO')
 GITHUB_BRANCH = os.getenv('GITHUB_BRANCH', 'main')
+HASHNODE_BLOG_HOST = os.getenv('HASHNODE_BLOG_HOST') # 새로 추가된 변수
+
+# --- GraphQL 쿼리 모음 ---
+GET_POSTS_QUERY = """
+query getPosts($host: String!) {
+  publication(host: $host) {
+    posts(first: 50) {
+      edges {
+        node {
+          id
+          title
+        }
+      }
+    }
+  }
+}
+"""
 
 CREATE_POST_MUTATION = """
 mutation publishPost($input: PublishPostInput!) {
@@ -22,50 +39,48 @@ mutation publishPost($input: PublishPostInput!) {
 }
 """
 
+UPDATE_POST_MUTATION = """
+mutation updatePost($input: UpdatePostInput!) {
+  updatePost(input: $input) {
+    post {
+      id
+      title
+      url
+    }
+  }
+}
+"""
+
 def extract_title_from_markdown(content, fallback_title):
-    """마크다운 본문에서 첫 번째 # 제목을 추출합니다."""
     match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
     if match:
-        # 본문에서 # 제목 줄을 제거하고, 제목만 반환
         title = match.group(1).strip()
         new_content = re.sub(r'^#\s+(.+)$\n+', '', content, count=1, flags=re.MULTILINE)
         return title, new_content
     return fallback_title, content
 
 def fix_image_urls(content, file_dir):
-    """로컬 이미지 경로를 GitHub Raw URL로 변환합니다."""
-    # ![alt](경로) 형태를 찾습니다. (http로 시작하는 웹 URL은 무시)
     pattern = r'!\[([^\]]*)\]\((?!http)(.*?)\)'
-    
     def replace_url(match):
         alt_text = match.group(1)
         img_path = match.group(2)
-        # GitHub Raw URL 생성
-        # 예: https://raw.githubusercontent.com/Santiago-kwp/TIL/main/opencv-python-learn/Chap4.../images/sample.png
         raw_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{file_dir}/{img_path}"
         return f"![{alt_text}]({raw_url})"
-
     return re.sub(pattern, replace_url, content)
 
 def generate_tags_from_path(topic_folder):
-    """폴더명을 기반으로 Hashnode 태그 형식으로 변환합니다."""
-    # 예: opencv-python-learn -> ['opencv', 'python']
     raw_tags = topic_folder.replace('-learn', '').split('-')
-    raw_tags.append('TIL') # 기본 태그 추가
-    
-    # Hashnode는 tag slug 형식을 요구합니다.
+    raw_tags.append('TIL')
     tags = [{"slug": tag.lower(), "name": tag} for tag in raw_tags if tag]
     return tags
 
 def main():
     filepath = sys.argv[1]
     
-    # 파일이 존재하는지 확인 (삭제된 파일 처리)
     if not os.path.exists(filepath):
         print(f"File {filepath} was deleted. Skipping.")
         sys.exit(0)
 
-    # 경로 분석 (예: opencv-python-learn/Chap4-OpenCV.../README.md)
     path_parts = filepath.split('/')
     file_dir = os.path.dirname(filepath)
     
@@ -75,23 +90,42 @@ def main():
     with open(filepath, 'r', encoding='utf-8') as f:
         post = frontmatter.load(f)
 
-    # 1. 태그 설정 (Frontmatter가 있으면 쓰고, 없으면 폴더명 기반 생성)
     tags = post.get('tags')
     if tags:
         tag_objects = [{"slug": tag.lower().replace(" ", "-"), "name": tag} for tag in tags]
     else:
         tag_objects = generate_tags_from_path(topic_folder)
 
-    # 2. 본문 가져오기 및 이미지 경로 수정
     content = post.content
     content = fix_image_urls(content, file_dir)
 
-    # 3. 제목 설정 (Frontmatter -> 마크다운 # H1 -> 폴더명 순으로 탐색)
     title = post.get('title')
     if not title:
         fallback_title = f"[{topic_folder.replace('-learn', '').upper()}] {chapter_folder}"
         title, content = extract_title_from_markdown(content, fallback_title)
 
+    headers = {
+        "Authorization": HASHNODE_PAT
+    }
+
+    # --- 추가된 핵심 로직: 기존 글 검색 ---
+    existing_post_id = None
+    if HASHNODE_BLOG_HOST:
+        posts_resp = requests.post(
+            HASHNODE_API_URL,
+            json={'query': GET_POSTS_QUERY, 'variables': {'host': HASHNODE_BLOG_HOST}},
+            headers=headers
+        ).json()
+        
+        # 제목이 똑같은 글이 있는지 검사
+        if 'data' in posts_resp and posts_resp['data']['publication']:
+            recent_posts = posts_resp['data']['publication']['posts']['edges']
+            for edge in recent_posts:
+                if edge['node']['title'] == title:
+                    existing_post_id = edge['node']['id']
+                    break
+
+    # API 변수 세팅
     variables = {
         "input": {
             "title": title,
@@ -101,15 +135,18 @@ def main():
         }
     }
 
-    headers = {
-        "Authorization": HASHNODE_PAT
-    }
+    # 기존 글이 있으면 UPDATE, 없으면 CREATE
+    if existing_post_id:
+        print(f"🔄 Found existing post. Updating: {title}")
+        variables["input"]["id"] = existing_post_id
+        graphql_query = UPDATE_POST_MUTATION
+    else:
+        print(f"📝 Publishing new post: {title}")
+        graphql_query = CREATE_POST_MUTATION
 
-    print(f"Uploading: {title}")
-    
     response = requests.post(
         HASHNODE_API_URL,
-        json={'query': CREATE_POST_MUTATION, 'variables': variables},
+        json={'query': graphql_query, 'variables': variables},
         headers=headers
     )
     
@@ -123,8 +160,10 @@ def main():
         print(f"GraphQL Error: {result['errors']}")
         sys.exit(1)
 
-    post_url = result['data']['publishPost']['post']['url']
-    print(f"✅ Successfully published! URL: {post_url}")
+    # 응답 데이터 파싱 (updatePost인지 publishPost인지에 따라 다름)
+    mutation_name = 'updatePost' if existing_post_id else 'publishPost'
+    post_url = result['data'][mutation_name]['post']['url']
+    print(f"✅ Success! URL: {post_url}")
 
 if __name__ == "__main__":
     main()

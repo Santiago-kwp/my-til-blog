@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/Chap4-Data-extraction-for-Sales/Lesson10-data-integration-multiple-axis.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Chap4-Data-extraction-for-Sales/Lesson9-data-aggregation-based-timeseries.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Chap5-Data-extraction-for-understading-Users/Lesson11-find-characteristics-trend-of-All-Users.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Chap5-Data-extraction-for-understading-Users/Lesson12-find-status-transition-of-All-Users.sql" dialect="PostgreSQL" />
+  </component>
+</project>
