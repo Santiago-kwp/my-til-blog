@@ -1,13 +1,12 @@
-# file: .github/workflows/publish_article.yml
-
 name: Publish to Hashnode
 
 on:
   push:
     branches:
-      - main # main 브랜치에 푸시될 때만 실행
+      - main
     paths:
-      - "_posts/**.md" # _posts 폴더 안의 마크다운 파일이 변경될 때만 실행
+      - "**/*.md" # 모든 하위 폴더의 마크다운 파일 변경 감지
+      - "!.github/**" # 단, .github 폴더 안의 파일은 제외
 
 jobs:
   publish:
@@ -18,12 +17,16 @@ jobs:
 
       - name: Find changed markdown files
         id: changed_files
-        uses: tj-actions/changed-files@v35 # 변경된 파일만 찾아주는 액션
+        uses: tj-actions/changed-files@v35
         with:
-          files: _posts/**.md
+          files: |
+            **/*.md
+          files_ignore: |
+            .github/**
+            README.md # 최상위 레포지토리 소개 리드미는 제외
 
       - name: Set up Python
-        if: steps.changed_files.outputs.any_changed == 'true' # 변경된 파일이 있을 때만 아래 단계를 실행
+        if: steps.changed_files.outputs.any_changed == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
@@ -37,10 +40,13 @@ jobs:
       - name: Run publisher script for each changed file
         if: steps.changed_files.outputs.any_changed == 'true'
         env:
-          HASHNODE_PAT: ${{ secrets.HASHNODE_PAT }} # GitHub Secrets에서 값을 가져와 환경변수로 설정
+          HASHNODE_PAT: ${{ secrets.HASHNODE_PAT }}
           HASHNODE_PUBLICATION_ID: ${{ secrets.HASHNODE_PUBLICATION_ID }}
+          # 이미지 URL 변환을 위해 현재 레포 정보 전달
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_BRANCH: ${{ github.ref_name }}
         run: |
           for file in ${{ steps.changed_files.outputs.all_changed_files }}; do
-            echo ">> Publishing $file to Hashnode..."
+            echo ">> Processing $file..."
             python .github/scripts/publish_to_hashnode.py "$file"
           done
