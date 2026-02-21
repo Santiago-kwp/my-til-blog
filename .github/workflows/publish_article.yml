@@ -1,0 +1,46 @@
+# file: .github/workflows/publish_article.yml
+
+name: Publish to Hashnode
+
+on:
+  push:
+    branches:
+      - main # main 브랜치에 푸시될 때만 실행
+    paths:
+      - "_posts/**.md" # _posts 폴더 안의 마크다운 파일이 변경될 때만 실행
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Find changed markdown files
+        id: changed_files
+        uses: tj-actions/changed-files@v35 # 변경된 파일만 찾아주는 액션
+        with:
+          files: _posts/**.md
+
+      - name: Set up Python
+        if: steps.changed_files.outputs.any_changed == 'true' # 변경된 파일이 있을 때만 아래 단계를 실행
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Python Dependencies
+        if: steps.changed_files.outputs.any_changed == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-frontmatter requests
+
+      - name: Run publisher script for each changed file
+        if: steps.changed_files.outputs.any_changed == 'true'
+        env:
+          HASHNODE_PAT: ${{ secrets.HASHNODE_PAT }} # GitHub Secrets에서 값을 가져와 환경변수로 설정
+          HASHNODE_PUBLICATION_ID: ${{ secrets.HASHNODE_PUBLICATION_ID }}
+        run: |
+          for file in ${{ steps.changed_files.outputs.all_changed_files }}; do
+            echo ">> Publishing $file to Hashnode..."
+            python .github/scripts/publish_to_hashnode.py "$file"
+          done
