@@ -1,3 +1,5 @@
+[← OpenCV-Python 학습 목차로 돌아가기](../README.md)
+
 # 6. 화소 처리 (Processing Pixel)
 
 > 화소(Pixel)란 화면(영상)을 구성하는 가장 기본이 되는 단위이다.

@@ -14,3 +14,17 @@ def filter(image, mask):
             tmp = cv2.multiply(roi, mask)   # 회선 적용 - 원소간 곱셈
             dst[i, j] = cv2.sumElems(tmp)[0]    # 출력 화소 저장
     return dst
+
+
+def differential(image, data1, data2):
+    mask1 = np.array(data1, np.float32).reshape(3, 3)
+    mask2 = np.array(data2, np.float32).reshape(3, 3)
+
+    dst1 = filter(image, mask1) # 사용자 정의 회선 함수
+    dst2 = filter(image, mask2)
+    dst = cv2.magnitude(dst1, dst2)
+
+    dst = cv2.convertScaleAbs(dst)  # 절대값 및 형변환
+    dst1 = cv2.convertScaleAbs(dst1)
+    dst2 = cv2.convertScaleAbs(dst2)
+    return dst, dst1, dst2
