@@ -311,8 +311,9 @@ def _detect_blue_hough(image: np.ndarray) -> Optional[Tuple[int, int, int]]:
         area = cv2.contourArea(cnt)
         x, y, w, h = cv2.boundingRect(cnt)
         cx = x + w / 2
-        # 이미지 최하단(y+h > 95%)의 파란 객체 제외: 책상 서랍 등 오인식 방지
-        if area > 15000 and W_img * 0.15 < cx < W_img * 0.85 and (y + h) < H_img * 0.95:
+        # 가로세로 비율 필터: 달력 베이스는 넓고 납작(w/h > 2.0)
+        # 책상 서랍 등 세로로 긴 파란 객체(w/h ≈ 1) 제외
+        if area > 15000 and W_img * 0.15 < cx < W_img * 0.85 and w > h * 2.0:
             candidates.append((area, x, y, w, h))
     if not candidates:
         return None
