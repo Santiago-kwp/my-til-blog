@@ -282,79 +282,95 @@ def measure_calendar_height(
 
 def _detect_blue_hough(image: np.ndarray) -> Optional[Tuple[int, int, int]]:
     """
-    달력 흰 인쇄 영역(white body) 감지.
+    달력 흰 인쇄 영역(white body) 감지 — 연결 컴포넌트 기반.
 
     전략:
       1. HSV 마스킹으로 네이비 블루 베이스 탐색
          - bottom_y = 파란 베이스의 상단 (= 흰 인쇄 영역의 하단)
-         - 이미지 최하단(y+h > 95%) 파란 객체는 책상 서랍으로 간주해 제외
-      2. 파란 베이스 위쪽 열 범위에서 고휘도 행 탐색 → top_y
-         - 밝기 평균 > 185인 첫 번째 행 = 흰 인쇄 영역 상단
-         - 고휘도 행이 없으면 Hough 수평선 5th-percentile로 폴백
+         - 가로세로 비율 필터(w/h > 2.0)
+      2. 파란 베이스 열 범위 내에서만 흰색 세그멘테이션
+         - HSV(S<55, V>175) + 열 범위 제한 → 배경 벽면 제외
+         - 모폴로지 클로징으로 격자선·날짜 숫자 공백 채우기
+      3. 블루 베이스 바로 위에서 연결 컴포넌트 시드
+         - bottom_y 근처에서 흰색 컴포넌트 ID 수집
+         - 해당 컴포넌트의 최상단 y = top_y (배경 분리 보장)
+      4. 폴백: 중앙 50% 열 기반 고휘도 행 탐색
     """
     H_img, W_img = image.shape[:2]
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    # 네이비 블루 (달력 베이스)
-    lower = np.array([100, 80, 20])
-    upper = np.array([125, 255, 130])
-    mask = cv2.inRange(hsv, lower, upper)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 8))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    # ── Step 1: 파란 베이스 감지 (bottom_y, bx, bw) ──
+    lower_blue = np.array([100, 80, 20])
+    upper_blue = np.array([125, 255, 130])
+    blue_mask = cv2.inRange(hsv, lower_blue, upper_blue)
+    kernel_blue = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 8))
+    blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel_blue)
 
-    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
         return None
 
-    candidates = []
+    blue_cands = []
     for cnt in cnts:
         area = cv2.contourArea(cnt)
         x, y, w, h = cv2.boundingRect(cnt)
         cx = x + w / 2
-        # 가로세로 비율 필터: 달력 베이스는 넓고 납작(w/h > 2.0)
-        # 책상 서랍 등 세로로 긴 파란 객체(w/h ≈ 1) 제외
         if area > 15000 and W_img * 0.15 < cx < W_img * 0.85 and w > h * 2.0:
-            candidates.append((area, x, y, w, h))
-    if not candidates:
+            blue_cands.append((area, x, y, w, h))
+    if not blue_cands:
         return None
 
-    candidates.sort(reverse=True)
-    _, bx, by, bw, bh = candidates[0]
-    # 흰 인쇄 영역의 하단 = 파란 베이스의 상단
+    blue_cands.sort(reverse=True)
+    _, bx, by, bw, bh = blue_cands[0]
     bottom_y = by
 
-    # 흰 인쇄 영역 상단 탐색 (파란 베이스 위쪽, 파란 베이스 열 범위)
-    col_l = max(0, bx + bw // 5)
-    col_r = min(W_img, bx + 4 * bw // 5)
-    search_top = max(0, by - int(H_img * 0.85))
+    # ── Step 2: 흰색 마스크 — 파란 베이스 열 범위로 배경 제외 ──
+    white_mask = cv2.inRange(
+        hsv,
+        np.array([0,   0, 175]),
+        np.array([180, 55, 255]),
+    )
+    # 파란 베이스 열 범위 ±12.5% 밖은 배경으로 간주해 제거
+    col_l = max(0,    bx - bw // 8)
+    col_r = min(W_img, bx + bw + bw // 8)
+    tmp = np.zeros_like(white_mask)
+    tmp[:, col_l:col_r] = white_mask[:, col_l:col_r]
+    white_mask = tmp
+    white_mask[bottom_y:, :] = 0
 
-    roi_bgr = image[search_top:bottom_y, col_l:col_r]
-    if roi_bgr.shape[0] < 10:
-        return (0, bottom_y, bottom_y)
+    # ── Step 3: 모폴로지 클로징 ──
+    kw = max(64, bw // 10)
+    kh = max(32, H_img // 34)
+    kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
+    white_filled = cv2.morphologyEx(white_mask, cv2.MORPH_CLOSE, kernel_close)
 
-    roi_gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
+    # ── Step 4: 연결 컴포넌트 — 블루 베이스 위에서 시드 ──
+    _, labeled = cv2.connectedComponents(white_filled)
+    seed_labels: set = set()
+    for dy in range(1, min(80, bottom_y)):
+        row_labels = set(labeled[bottom_y - dy, col_l:col_r].tolist()) - {0}
+        seed_labels |= row_labels
+        if seed_labels:
+            break
 
-    # 고휘도 행 탐색: 흰 인쇄 영역의 최상단 행
-    row_mean = np.mean(roi_gray, axis=1)
-    white_rows = np.where(row_mean > 185)[0]
-    if len(white_rows) > 0:
-        top_y = int(white_rows[0]) + search_top
-    else:
-        # 폴백: Hough 수평선 5th-percentile
-        edges = cv2.Canny(roi_gray, 30, 100)
-        lines = cv2.HoughLinesP(
-            edges, 1, np.pi / 180,
-            threshold=60, minLineLength=60, maxLineGap=30,
+    top_y = None
+    if seed_labels:
+        cal_mask = np.isin(labeled, list(seed_labels)).astype(np.uint8)
+        ys = np.where(cal_mask)[0]
+        if len(ys) > 0:
+            top_y = int(ys.min())
+
+    # ── Step 5: 폴백 — 고휘도 행 탐색 ──
+    if top_y is None:
+        col_c_l = max(0, W_img // 4)
+        col_c_r = min(W_img, 3 * W_img // 4)
+        search_top = max(0, by - int(H_img * 0.85))
+        roi_gray = cv2.cvtColor(
+            image[search_top:bottom_y, col_c_l:col_c_r], cv2.COLOR_BGR2GRAY
         )
-        if lines is None:
-            top_y = search_top
-        else:
-            h_ys = []
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                if abs(np.degrees(np.arctan2(y2 - y1, x2 - x1))) < 8:
-                    h_ys.append((y1 + y2) // 2 + search_top)
-            top_y = int(np.percentile(h_ys, 5)) if h_ys else search_top
+        row_mean = np.mean(roi_gray, axis=1)
+        white_rows = np.where(row_mean > 185)[0]
+        top_y = int(white_rows[0]) + search_top if len(white_rows) > 0 else search_top
 
     height_px = bottom_y - top_y
     if height_px <= 0:
