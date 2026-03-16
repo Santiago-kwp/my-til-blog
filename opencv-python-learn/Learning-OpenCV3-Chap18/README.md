@@ -225,3 +225,155 @@ $\vec{D_i} = (\frac{s_{i,0}}{s_{i, N-1}}, \frac{s_{i,1}}{s_{i, N-1}}, ..., \frac
 ### 18.1.2 로드리게스 변환
 
 > 3차원 공간을 다룰 때는 공간에서 3x3 행렬로 표현한 회전을 주로 사용한다. 벡터를 이 행렬에 곱하는 것과 벡터를 특정한 방향으로 회전시키는 것이 서로 같기 때문에 보통 이 표현 방식이 가장 편리하다. 단점은 어느 3x3 행렬이 어떤 회전을 하는지 직관적으로 알기 어렵다는 것이다. 따라서 이 장에서는 일부 OpenCV 함수에서 사용되는 회전에 대한 대체 표현과 이 대체 표현으로 변환하는 유용한 함수를 소개한다.
+
+---
+
+#### 축-각도 표현 (Axis-Angle Representation) 직관
+
+3D 공간에서 어떤 회전이든 **하나의 축(axis)과 그 축 주위의 회전 각도(angle)** 로 표현할 수 있다.
+
+```
+        z
+        │   ← 회전축 방향 (단위벡터 r_hat)
+        │  ↗
+        │ /  θ = 회전 각도 (벡터의 크기)
+        │/
+        └──────── x
+       /
+      y
+```
+
+로드리게스 벡터 $\vec{r}$은 이 두 정보를 **하나의 벡터에 압축**한다.
+
+$$
+\vec{r} = \theta \cdot \hat{r}
+$$
+
+| 의미 | 수식 | 설명 |
+| ---- | ---- | ---- |
+| 회전 각도 | $\theta = \|\vec{r}\|$ | 벡터의 크기(길이) |
+| 회전 축 방향 | $\hat{r} = \dfrac{\vec{r}}{\|\vec{r}\|}$ | 벡터를 정규화한 단위벡터 |
+
+> 예: $\vec{r} = \begin{bmatrix} 0 \\ 0 \\ \pi/2 \end{bmatrix}$ 이면, z축 주위로 90° 회전을 의미한다.
+
+---
+
+#### 두 가지 회전 표현 비교
+
+| 표현 방식 | 형태 | 장점 | 단점 |
+| --------- | ---- | ---- | ---- |
+| **회전 행렬** $R$ | 3×3 행렬 (9개 원소) | 계산이 빠름, 벡터에 바로 곱할 수 있음 | 직관적으로 이해하기 어려움 |
+| **로드리게스 벡터** $\vec{r}$ | 3×1 벡터 (3개 원소) | 직관적, 저장 공간 작음 | 행렬 연산 불가, 변환 필요 |
+
+---
+
+#### 벡터 → 회전 행렬 변환 공식
+
+> $\vec{r} = \begin{bmatrix} r_x & r_y & r_z \end{bmatrix}^T$, $\theta = \|\vec{r}\|$, $\hat{r} = \vec{r}/\theta$ 로 정의한다.
+
+$$
+R = \cos\theta \, I_3 + (1-\cos\theta)\,\hat{r}\hat{r}^T + \sin\theta \begin{bmatrix} 0 & -\hat{r}_z & \hat{r}_y \\ \hat{r}_z & 0 & -\hat{r}_x \\ -\hat{r}_y & \hat{r}_x & 0 \end{bmatrix}
+$$
+
+**수식 3항 분해:**
+
+| 항 | 역할 |
+| --- | --- |
+| $\cos\theta \, I_3$ | 회전 전 기존 성분 유지 (cosine 비율) |
+| $(1-\cos\theta)\,\hat{r}\hat{r}^T$ | 회전 축 방향 성분 보정 |
+| $\sin\theta [\hat{r}]_\times$ | 축 주위로 회전시키는 성분 (반대칭 행렬) |
+
+> 마지막 항의 $\begin{bmatrix} 0 & -\hat{r}_z & \hat{r}_y \\ \hat{r}_z & 0 & -\hat{r}_x \\ -\hat{r}_y & \hat{r}_x & 0 \end{bmatrix}$ 은 **반대칭 행렬(skew-symmetric matrix)** 로, 외적(cross product) 연산을 행렬로 표현한 것이다.
+
+---
+
+#### 회전 행렬 → 벡터 역변환 공식
+
+회전 행렬 $R$에서 축-크기 표현으로 되돌리려면 $R$의 반대칭 부분을 이용한다.
+
+$$
+\sin\theta \begin{bmatrix} 0 & -\hat{r}_z & \hat{r}_y \\ \hat{r}_z & 0 & -\hat{r}_x \\ -\hat{r}_y & \hat{r}_x & 0 \end{bmatrix} = \frac{R - R^T}{2}
+$$
+
+$$
+\theta = \arccos\left(\frac{\mathrm{trace}(R) - 1}{2}\right)
+$$
+
+> trace$(R)$는 행렬의 대각 원소의 합, 즉 $R_{00} + R_{11} + R_{22}$이다.
+
+---
+
+#### 주요 성질
+
+- 회전 행렬 $R$은 항상 **직교 행렬(orthogonal matrix)**: $R^T R = I$
+- $\det(R) = +1$ (반사 없이 순수 회전)
+- $\vec{r} = \vec{0}$ (영벡터)이면 $R = I$ (항등 변환, 회전 없음)
+- $\vec{r}$과 $-\vec{r}$은 반대 방향 회전 (반시계 ↔ 시계)
+
+---
+
+#### OpenCV 함수: `cv::Rodrigues()`
+
+> 따라서 계산에 가장 편리한 표현(행렬 표현)과 사람의 뇌가 이해하기에 좀 더 쉬운 표현(로드리게스 표현)을 사용할 수 있다. OpenCV는 표현끼리 서로 변환할 수 있는 함수를 제공한다.
+
+```cpp
+void cv::Rodrigues(
+    cv::InputArray src,                       // 입력: 회전 벡터(3×1) 또는 회전 행렬(3×3)
+    cv::OutputArray dst,                      // 출력: 회전 행렬(3×3) 또는 회전 벡터(3×1)
+    cv::OutputArray jacobian = cv::noArray()  // (선택) 자코비안 행렬 (3×9 또는 9×3)
+);
+```
+
+**입출력 방향:**
+
+| `src` | `dst` | 변환 방향 |
+| ----- | ----- | --------- |
+| 3×1 회전 벡터 $\vec{r}$ | 3×3 회전 행렬 $R$ | 벡터 → 행렬 |
+| 3×3 회전 행렬 $R$ | 3×1 회전 벡터 $\vec{r}$ | 행렬 → 벡터 |
+
+> `jacobian` 인수가 `cv::noArray()`가 아니면, 입력 배열의 각 원소에 대한 출력 배열의 편미분으로 채워진 3×9 또는 9×3 자코비안 행렬을 반환한다. 이는 최적화 알고리즘(예: 카메라 보정)에서 활용된다.
+
+---
+
+#### Python 예제
+
+```python
+import cv2
+import numpy as np
+
+# 1) 로드리게스 벡터 → 회전 행렬
+rvec = np.array([[0.0], [0.0], [np.pi / 2]])  # z축 주위로 90° 회전
+R, jacobian = cv2.Rodrigues(rvec)
+print("회전 행렬 R:")
+print(np.round(R, 4))
+# [[ 0. -1.  0.]
+#  [ 1.  0.  0.]
+#  [ 0.  0.  1.]]
+
+# 2) 회전 행렬 → 로드리게스 벡터 (역변환)
+rvec_back, _ = cv2.Rodrigues(R)
+print("\n역변환 결과 rvec:")
+print(np.round(rvec_back, 4))
+# [[0.    ]
+#  [0.    ]
+#  [1.5708]]  ← π/2 ≈ 1.5708
+```
+
+---
+
+#### 실제 활용: 카메라 보정의 외부 파라미터
+
+카메라 보정(`cv2.calibrateCamera()`)의 결과로 반환되는 `rvecs`가 바로 로드리게스 벡터다.
+
+```python
+ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+    objpoints, imgpoints, gray.shape[::-1], None, None
+)
+# rvecs[i]: i번째 보정 영상에서 카메라와 체스보드 간의 상대 회전 (로드리게스 벡터)
+# tvecs[i]: i번째 보정 영상에서 카메라와 체스보드 간의 상대 이동 (평행이동 벡터)
+
+# 회전 행렬로 변환
+R, _ = cv2.Rodrigues(rvecs[0])
+```
+
+> 로드리게스 벡터는 **저장 및 최적화 단계에서 3개의 값**만 다루면 되므로, 9개 원소의 회전 행렬보다 훨씬 효율적이다.
