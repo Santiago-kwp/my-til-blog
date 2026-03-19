@@ -364,11 +364,11 @@ for epoch in range(1, EPOCHS+1):
 
 GAN은 강력한 생성 모델이지만, 아직 극복해야 할 세 가지 주요 한계가 존재한다.
 
-| 한계 | 핵심 문제 |
-|------|-----------|
-| 노이즈 기반 생성 | 어떤 이미지가 출력될지 제어 불가 |
+| 한계             | 핵심 문제                            |
+| ---------------- | ------------------------------------ |
+| 노이즈 기반 생성 | 어떤 이미지가 출력될지 제어 불가     |
 | 개체 인식 불가능 | 이미지 내 객체의 위치·속성 조절 불가 |
-| 학습의 불안정성 | 모드 붕괴, 학습 발산 등 |
+| 학습의 불안정성  | 모드 붕괴, 학습 발산 등              |
 
 #### 노이즈로부터 만들어지는 이미지
 
@@ -436,15 +436,134 @@ graph TD
 생성자가 다양한 이미지를 생성하는 대신, **판별자를 가장 잘 속이는 소수의 패턴만 반복적으로 출력**하는 현상이다.
 
 예시:
+
 - MNIST 학습 중 생성자가 `1`만 계속 만들어냄
 - 인물 이미지 학습 중 특정 얼굴 각도의 이미지만 반복 생성
 
 모드 붕괴가 발생하면 생성자는 데이터셋의 다양한 분포를 학습하지 못하고, 실제 데이터에 존재하는 여러 패턴 중 극히 일부만 재현하게 된다.
 
-| 항목 | 정상 학습 | 모드 붕괴 |
-|------|-----------|-----------|
+| 항목        | 정상 학습             | 모드 붕괴             |
+| ----------- | --------------------- | --------------------- |
 | 생성 다양성 | 높음 (전체 분포 반영) | 낮음 (일부 패턴 반복) |
-| 판별자 손실 | 점진적 감소 | 불규칙하게 진동 |
-| 생성자 손실 | 점진적 감소 | 갑자기 낮아진 후 고착 |
+| 판별자 손실 | 점진적 감소           | 불규칙하게 진동       |
+| 생성자 손실 | 점진적 감소           | 갑자기 낮아진 후 고착 |
 
-**해결 방향**: 미니배치 판별(minibatch discrimination), Wasserstein GAN(WGAN), 학습률 조정 등의 기법으로 완화할 수 있다.
+**해결 방향**: 미니배치 판별(minibatch discrimination), Wasserstein GAN(WGAN), Spectral Normalization 등의 기법으로 완화할 수 있다.
+
+---
+
+#### Wasserstein GAN (WGAN)
+
+기본 GAN의 판별자는 이진 분류(진짜/가짜)를 수행하므로, 학습이 어느 정도 진행되면 **판별자가 너무 강해져 생성자의 그레디언트가 소실**되는 문제가 발생한다.
+
+WGAN은 손실 함수를 **Wasserstein Distance(Earth Mover's Distance)** 로 교체하여 이 문제를 해결한다.
+
+**Wasserstein Distance란?**
+
+두 확률 분포 $P_r$ (실제 데이터)과 $P_g$ (생성 데이터) 사이의 거리를 측정하는 지표로, 한 분포를 다른 분포로 변환하기 위해 필요한 **최소 이동 비용**으로 직관적으로 이해할 수 있다.
+
+$$W(P_r, P_g) = \inf_{\gamma \in \Pi(P_r, P_g)} \mathbb{E}_{(x, y) \sim \gamma} [\|x - y\|]$$
+
+기존 GAN의 손실 함수(Jensen-Shannon Divergence)는 두 분포가 겹치지 않으면 그레디언트가 `0`이 되어 학습이 멈추지만, Wasserstein Distance는 분포가 겹치지 않아도 **의미 있는 거리값과 그레디언트를 제공**한다.
+
+```mermaid
+graph LR
+    subgraph "기본 GAN 손실"
+        A1["두 분포가\n겹치지 않음"] --> B1["JS Divergence\n= 상수"]
+        B1 --> C1["그레디언트 = 0\n학습 정체"]
+    end
+
+    subgraph "WGAN 손실"
+        A2["두 분포가\n겹치지 않음"] --> B2["Wasserstein Distance\n= 의미있는 거리값"]
+        B2 --> C2["그레디언트 유지\n학습 지속"]
+    end
+
+    style C1 fill:#f44336,color:#fff
+    style C2 fill:#4CAF50,color:#fff
+```
+
+**WGAN의 핵심 변경점:**
+
+| 항목 | 기본 GAN | WGAN |
+|------|----------|------|
+| 판별자 역할 | 진짜/가짜 분류 (0~1 확률) | Critic — 실수값 점수 출력 |
+| 손실 함수 | Binary Cross-Entropy | Wasserstein Distance |
+| 판별자 출력 | Sigmoid (0~1) | 선형 (제한 없음) |
+| 제약 조건 | 없음 | **Weight Clipping** (가중치 범위 제한) |
+
+판별자를 **Critic**이라 부르며, 이진 분류 대신 "얼마나 진짜 같은가"를 나타내는 실수값 점수를 출력한다.
+
+```python
+# WGAN 판별자(Critic) 손실 — 진짜 점수 최대화, 가짜 점수 최소화
+def critic_loss(real_output, fake_output):
+    return -(tf.reduce_mean(real_output) - tf.reduce_mean(fake_output))
+
+# WGAN 생성자 손실 — Critic의 가짜 점수 최대화
+def wgan_generator_loss(fake_output):
+    return -tf.reduce_mean(fake_output)
+```
+
+---
+
+#### Spectral Normalization
+
+WGAN의 Weight Clipping은 구현이 단순하지만, 지나치게 제약이 강해 표현력이 낮아지는 부작용이 있다. **Spectral Normalization**은 이를 보완하는 더 정교한 정규화 기법이다.
+
+**핵심 아이디어**: 판별자(또는 Critic)의 각 가중치 행렬을 **스펙트럼 노름(spectral norm)** 으로 나누어 정규화한다.
+
+$$\hat{W} = \frac{W}{\sigma(W)}$$
+
+여기서 $\sigma(W)$는 가중치 행렬 $W$의 최대 특이값(largest singular value)이다.
+
+**왜 효과적인가?**
+
+신경망이 립시츠 연속성(Lipschitz continuity)을 만족해야 WGAN의 학습이 안정적으로 이루어진다. Spectral Normalization은 각 층의 립시츠 상수를 1로 제한함으로써 전체 네트워크가 1-Lipschitz 조건을 만족하게 한다.
+
+| 방법 | 원리 | 장점 | 단점 |
+|------|------|------|------|
+| Weight Clipping | 가중치를 $[-c, c]$ 범위로 강제 | 구현 단순 | 표현력 저하, $c$ 값 튜닝 필요 |
+| Spectral Normalization | 스펙트럼 노름으로 정규화 | 표현력 유지, 안정적 학습 | 계산 비용 소폭 증가 |
+
+```python
+from tensorflow.keras.layers import Conv2D
+import tensorflow as tf
+
+# Spectral Normalization을 적용한 Dense 레이어 예시
+class SpectralNormDense(tf.keras.layers.Layer):
+    def __init__(self, units):
+        super().__init__()
+        self.units = units
+
+    def build(self, input_shape):
+        self.w = self.add_weight(shape=(input_shape[-1], self.units), initializer='glorot_uniform')
+        self.u = self.add_weight(shape=(1, self.units), initializer='truncated_normal', trainable=False)
+
+    def call(self, inputs):
+        # 멱승법(Power Iteration)으로 최대 특이값 근사
+        v = tf.math.l2_normalize(tf.matmul(self.u, tf.transpose(self.w)))
+        u_hat = tf.math.l2_normalize(tf.matmul(v, self.w))
+        sigma = tf.matmul(tf.matmul(v, self.w), tf.transpose(u_hat))
+        w_norm = self.w / sigma  # 스펙트럼 노름으로 정규화
+        return tf.matmul(inputs, w_norm)
+```
+
+**세 가지 안정화 기법 비교:**
+
+```mermaid
+graph TD
+    P["GAN 학습 불안정성"]
+
+    P --> A["Weight Clipping\n(WGAN)"]
+    P --> B["Spectral Normalization\n(SN-GAN)"]
+    P --> C["Minibatch Discrimination"]
+
+    A --> A1["가중치를 [-c, c]로 제한\n→ 립시츠 조건 만족\n→ 표현력 저하 부작용"]
+    B --> B1["스펙트럼 노름으로 정규화\n→ 립시츠 조건 만족\n→ 표현력 유지"]
+    C --> C1["미니배치 내 다양성 측정값을\n판별자 입력에 추가\n→ 모드 붕괴 직접 억제"]
+
+    style A1 fill:#FF9800,color:#fff
+    style B1 fill:#4CAF50,color:#fff
+    style C1 fill:#2196F3,color:#fff
+```
+
+## 3.2 딥러닝을 활용한 이미지 처리
