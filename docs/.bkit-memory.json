@@ -2,6 +2,10 @@
   "sessionCount": 33,
   "lastSession": {
     "startedAt": "2026-03-18T05:17:33.452Z",
+
+  "sessionCount": 26,
+  "lastSession": {
+    "startedAt": "2026-03-15T12:36:18.543Z",
     "platform": "claude",
     "level": "Starter"
   }

@@ -1,9 +1,11 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-04T08:01:40.234Z",
+  "lastUpdated": "2026-03-19T02:02:03.507Z",
   "activeFeatures": [
     "pitch-angle-image-size-correction",
-    "Practices"
+    "Practices",
+    "Chap8-Processing-geometry",
+    "Common"
   ],
   "primaryFeature": "pitch-angle-image-size-correction",
   "features": {
@@ -37,6 +39,32 @@
         "lastUpdated": "2026-03-04T08:01:40.234Z"
       },
       "lastFile": "C:\\Users\\HydroSEM\\dev\\santiago\\my-til-blog\\opencv-python-learn\\Practices\\pitch_correction.py"
+    },
+    "Chap8-Processing-geometry": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-19T01:59:43.939Z",
+        "lastUpdated": "2026-03-19T01:59:43.939Z"
+      },
+      "lastFile": "/Users/user/devStudy/my-til-blog/opencv-python-learn/Chap8-Processing-geometry/02.scaling_nearest.py"
+    },
+    "Common": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-19T02:02:03.507Z",
+        "lastUpdated": "2026-03-19T02:02:03.507Z"
+      },
+      "lastFile": "/Users/user/devStudy/my-til-blog/opencv-python-learn/Common/interpolation.py"
     }
   },
   "pipeline": {
@@ -47,7 +75,7 @@
   "session": {
     "startedAt": "2026-02-14T07:10:55.463Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-04T08:01:40.234Z"
+    "lastActivity": "2026-03-19T02:02:03.507Z"
   },
   "history": [
     {
@@ -95,6 +123,18 @@
     {
       "timestamp": "2026-03-04T08:01:40.234Z",
       "feature": "Practices",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-19T01:59:43.939Z",
+      "feature": "Chap8-Processing-geometry",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-19T02:02:03.507Z",
+      "feature": "Common",
       "phase": "do",
       "action": "updated"
     }

@@ -2,7 +2,7 @@ import os
 import numpy as np, cv2
 import time
 
-def scailing(img, size):
+def scaling(img, size):
     dst = np.zeros(size[::-1], img.dtype)   # size와 shape는 원소 역순
     ratioY, ratioX = np.divide(size[::-1], img.shape[:2])   # 비율 계산
     y = np.arange(0, img.shape[0], 1)   # 입력 영상 세로(y) 좌표 생성
@@ -33,7 +33,7 @@ def time_check(func, image, size, title):
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
 
 # 이미지 경로를 루트 기준으로 설정
-image_path = os.path.join(project_root, "images", "scailing.jpg")
+image_path = os.path.join(project_root, "images", "scaling.jpg")
 image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
 
