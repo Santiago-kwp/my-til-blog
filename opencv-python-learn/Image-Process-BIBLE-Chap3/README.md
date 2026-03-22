@@ -484,12 +484,12 @@ graph LR
 
 **WGAN의 핵심 변경점:**
 
-| 항목 | 기본 GAN | WGAN |
-|------|----------|------|
-| 판별자 역할 | 진짜/가짜 분류 (0~1 확률) | Critic — 실수값 점수 출력 |
-| 손실 함수 | Binary Cross-Entropy | Wasserstein Distance |
-| 판별자 출력 | Sigmoid (0~1) | 선형 (제한 없음) |
-| 제약 조건 | 없음 | **Weight Clipping** (가중치 범위 제한) |
+| 항목        | 기본 GAN                  | WGAN                                   |
+| ----------- | ------------------------- | -------------------------------------- |
+| 판별자 역할 | 진짜/가짜 분류 (0~1 확률) | Critic — 실수값 점수 출력              |
+| 손실 함수   | Binary Cross-Entropy      | Wasserstein Distance                   |
+| 판별자 출력 | Sigmoid (0~1)             | 선형 (제한 없음)                       |
+| 제약 조건   | 없음                      | **Weight Clipping** (가중치 범위 제한) |
 
 판별자를 **Critic**이라 부르며, 이진 분류 대신 "얼마나 진짜 같은가"를 나타내는 실수값 점수를 출력한다.
 
@@ -519,10 +519,10 @@ $$\hat{W} = \frac{W}{\sigma(W)}$$
 
 신경망이 립시츠 연속성(Lipschitz continuity)을 만족해야 WGAN의 학습이 안정적으로 이루어진다. Spectral Normalization은 각 층의 립시츠 상수를 1로 제한함으로써 전체 네트워크가 1-Lipschitz 조건을 만족하게 한다.
 
-| 방법 | 원리 | 장점 | 단점 |
-|------|------|------|------|
-| Weight Clipping | 가중치를 $[-c, c]$ 범위로 강제 | 구현 단순 | 표현력 저하, $c$ 값 튜닝 필요 |
-| Spectral Normalization | 스펙트럼 노름으로 정규화 | 표현력 유지, 안정적 학습 | 계산 비용 소폭 증가 |
+| 방법                   | 원리                           | 장점                     | 단점                          |
+| ---------------------- | ------------------------------ | ------------------------ | ----------------------------- |
+| Weight Clipping        | 가중치를 $[-c, c]$ 범위로 강제 | 구현 단순                | 표현력 저하, $c$ 값 튜닝 필요 |
+| Spectral Normalization | 스펙트럼 노름으로 정규화       | 표현력 유지, 안정적 학습 | 계산 비용 소폭 증가           |
 
 ```python
 from tensorflow.keras.layers import Conv2D
@@ -567,3 +567,351 @@ graph TD
 ```
 
 ## 3.2 딥러닝을 활용한 이미지 처리
+
+### 3.2.1 이미지 분류
+
+이미지 분류(Image Classification)는 입력 이미지가 어떤 클래스에 속하는지를 예측하는 작업이다. 여기서는 CIFAR-10 데이터셋을 활용하여 다층 퍼셉트론(MLP)과 합성곱 신경망(CNN)으로 이미지 분류를 실습한다.
+
+**CIFAR-10 데이터셋**
+
+- 32×32 픽셀 컬러 이미지 60,000장
+- 10개 클래스: 비행기, 자동차, 새, 고양이, 사슴, 개, 개구리, 말, 배, 트럭
+- 훈련 50,000장 / 테스트 10,000장
+
+#### 데이터 전처리
+
+**모듈 불러오기**
+
+```python
+import matplotlib.pyplot as plt
+from tensorflow.keras.datasets import cifar10
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+```
+
+**데이터 불러오기 및 확인**
+
+```python
+(train_images, train_labels), (test_images, test_labels) = cifar10.load_data()
+
+print(train_images.shape, train_labels.shape)
+# (50000, 32, 32, 3) (50000, 1)
+print(test_images.shape, test_labels.shape)
+# (10000, 32, 32, 3) (10000, 1)
+
+# 레이블은 0~9 정수
+```
+
+**데이터 정규화**
+
+```python
+train_images = train_images / 255.0
+test_images  = test_images  / 255.0
+```
+
+> 정규화를 통해 입력 데이터 범위를 [0, 1]로 조정하면 경사 하강법이 더 빠르게 수렴하고 학습 안정성이 높아진다.
+
+**데이터 분할 구조**
+
+```mermaid
+graph LR
+    RAW["원본 데이터\n60,000장"]
+    TRAIN["훈련 세트\n45,000장\n모델 가중치 직접 학습"]
+    VAL["검증 세트\n5,000장\n학습 중 성능 모니터링"]
+    TEST["테스트 세트\n10,000장\n최종 성능 평가"]
+
+    RAW --> TRAIN
+    RAW --> VAL
+    RAW --> TEST
+
+    style TRAIN fill:#4CAF50,color:#fff
+    style VAL fill:#2196F3,color:#fff
+    style TEST fill:#FF9800,color:#fff
+```
+
+| 데이터셋    | 역할                      | 사용 시점          |
+| ----------- | ------------------------- | ------------------ |
+| 훈련 세트   | 모델 가중치 직접 학습     | `model.fit()`      |
+| 검증 세트   | 학습 중간 과적합 모니터링 | 에포크마다         |
+| 테스트 세트 | 최종 성능 평가            | `model.evaluate()` |
+
+---
+
+#### 다층 퍼셉트론(MLP)을 활용한 이미지 분류
+
+**모델 구조**
+
+```python
+mlp_model = Sequential([
+    Flatten(input_shape=(32, 32, 3)),
+    Dense(512, activation='relu'),
+    Dense(256, activation='relu'),
+    Dense(128, activation='relu'),
+    Dense(10, activation='softmax')
+])
+```
+
+```mermaid
+graph LR
+    A["입력\n(32×32×3)"]
+    B["Flatten\n→ 3,072"]
+    C["Dense 512\nReLU"]
+    D["Dense 256\nReLU"]
+    E["Dense 128\nReLU"]
+    F["Dense 10\nSoftmax\n→ 클래스 확률"]
+
+    A --> B --> C --> D --> E --> F
+```
+
+| 층                   | 역할                                                  |
+| -------------------- | ----------------------------------------------------- |
+| **입력층 (Flatten)** | 32×32×3 이미지를 3,072개의 1차원 벡터로 변환          |
+| **은닉층 (Dense)**   | 비선형 관계 학습. 층이 깊을수록 복잡한 패턴 표현 가능 |
+| **출력층 (Softmax)** | 10개 클래스 확률 출력 (합 = 1)                        |
+
+**파라미터 수 계산**
+
+$$\text{파라미터 수} = \text{입력 뉴런} \times \text{출력 뉴런} + \text{출력 뉴런(편향)}$$
+
+첫 번째 Dense(512): $3{,}072 \times 512 + 512 = 1{,}573{,}376$ 개
+
+**모델 컴파일 및 학습**
+
+```python
+mlp_model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+mlp_model.fit(train_images, train_labels, epochs=5, validation_data=(val_images, val_labels))
+```
+
+- `batch_size` 기본값: 32 → 45,000장 ÷ 32 = 에포크당 **1,407번** 이터레이션
+
+**평가 결과**: 테스트 정확도 약 **46%**
+
+**MLP의 이미지 처리 한계**
+
+| 한계             | 설명                                                 |
+| ---------------- | ---------------------------------------------------- |
+| 고차원 비효율성  | 해상도 증가에 따라 가중치 수 폭발적 증가             |
+| 공간 정보 손실   | 픽셀을 1차원으로 펼치는 과정에서 위치·형태 정보 소실 |
+| 스케일 변형 취약 | 객체의 크기·방향·위치 변화에 민감하게 반응           |
+
+---
+
+#### 합성곱 신경망(CNN)을 활용한 이미지 분류
+
+```python
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dropout
+```
+
+**모델 구조**
+
+```python
+cnn_model = Sequential([
+    Conv2D(32, (3,3), padding='same', activation='relu', input_shape=(32, 32, 3)),
+    MaxPooling2D((2, 2)),
+    Conv2D(64, (3,3), padding='same', activation='relu'),
+    MaxPooling2D((2, 2)),
+    Conv2D(64, (3,3), padding='same', activation='relu'),
+    Flatten(),
+    Dropout(0.3),
+    Dense(64, activation='relu'),
+    Dropout(0.5),
+    Dense(10, activation='softmax')
+])
+```
+
+```mermaid
+graph LR
+    A["입력\n(32×32×3)"]
+    B["Conv2D 32\n(3×3, same)\n→ (32×32×32)"]
+    C["MaxPool\n(2×2)\n→ (16×16×32)"]
+    D["Conv2D 64\n(3×3, same)\n→ (16×16×64)"]
+    E["MaxPool\n(2×2)\n→ (8×8×64)"]
+    F["Conv2D 64\n(3×3, same)\n→ (8×8×64)"]
+    G["Flatten\n→ 4,096"]
+    H["Dropout(0.3)"]
+    I["Dense 64\nReLU"]
+    J["Dropout(0.5)"]
+    K["Dense 10\nSoftmax"]
+
+    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K
+```
+
+**Conv2D 파라미터 수 계산**
+
+| 층              | 계산식                                 | 파라미터 수  |
+| --------------- | -------------------------------------- | ------------ |
+| Conv2D(32, 3×3) | $(3 \times 3 \times 3 + 1) \times 32$  | **896개**    |
+| Conv2D(64, 3×3) | $(3 \times 3 \times 32 + 1) \times 64$ | **18,496개** |
+
+- 가중치: 필터 크기(가로 × 세로) × 입력 채널 수
+- 편향: 필터 1개당 1개
+
+**콜백 정의**
+
+텐서플로 콜백은 학습 중 특정 조건에 따라 동작을 자동 수행하는 핸들러다.
+
+```python
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+
+early_stopping = EarlyStopping(monitor='val_loss', patience=5)
+save_best = ModelCheckpoint('best_cifar10_cnn_model.h5', save_best_only=True)
+```
+
+- `patience=5`: 검증 손실이 5 에포크 연속으로 감소하지 않으면 학습 중단
+
+**평가 결과**: 테스트 정확도 약 **74.3%**
+
+**MLP vs CNN 성능 비교**
+
+| 항목          | MLP       | CNN             |
+| ------------- | --------- | --------------- |
+| 테스트 정확도 | ~46%      | ~74%            |
+| 파라미터 수   | 매우 많음 | 상대적으로 적음 |
+| 공간 정보     | 손실      | 유지            |
+| 위치 불변성   | 낮음      | 높음 (풀링)     |
+
+---
+
+### 3.2.2 객체 인식
+
+초기 객체 탐지는 특징 추출과 머신 러닝 기반 알고리즘을 활용했다. 대표적인 전통 기법인 **하르 캐스케이드(Haar Cascade)** 와 이를 뒷받침하는 **에이다부스트(AdaBoost)** 앙상블 학습에 대해 설명한다.
+
+#### 하르 캐스케이드
+
+2001년 폴 비올라(Paul Viola)와 마이클 존스(Michael Jones)가 제안한 객체 탐지 알고리즘이다. 효과적인 특징 추출과 에이다부스트(AdaBoost) 알고리즘을 결합하여, 복잡하고 다양한 이미지 데이터에서도 얼굴 같은 객체를 실시간으로 탐지할 수 있게 했다.
+
+**특징 추출**
+
+하르 캐스케이드는 합성곱 신경망의 학습된 필터가 아닌, **고정된 하르(Haar) 특징 필터**를 사용한다. 흰색과 검은색 직사각형 영역의 픽셀 강도 차이를 계산하여 특징값을 추출한다.
+
+```mermaid
+graph TD
+    subgraph "하르 특징 필터 종류"
+        A["에지 특징\nEdge Feature\n수평·수직 경계 검출"]
+        B["선 특징\nLine Feature\n중앙 밝기 변화 검출"]
+        C["중앙 특징\nCenter Feature\n대각선 패턴 검출"]
+    end
+
+    A --> D["픽셀 강도 차이 계산\n(흰 영역 합 - 검은 영역 합)"]
+    B --> D
+    C --> D
+    D --> E["특징값 추출"]
+
+    style D fill:#FF9800,color:#fff
+    style E fill:#4CAF50,color:#fff
+```
+
+**하르 캐스케이드 특징의 스케일과 위치**
+
+이미지 내 객체는 크기와 위치가 다양하므로, 탐지 알고리즘은 다양한 스케일과 위치를 모두 검색해야 한다.
+
+```mermaid
+graph LR
+    INPUT["입력 이미지"]
+
+    subgraph "다중 스케일 탐지"
+        S1["이미지 스케일링\n원본 이미지를 여러 크기로 축소"]
+        S2["특징 스케일링\n하르 필터 자체 크기 조정"]
+    end
+
+    subgraph "슬라이딩 윈도우"
+        SW["윈도우를 이미지\n전체에 슬라이드"]
+        ST["스트라이드\n(이동 간격 설정)"]
+        SW --> ST
+    end
+
+    INPUT --> S1 --> SW
+    INPUT --> S2 --> SW
+    ST --> OUT["각 위치에서\n특징 추출 및 분류"]
+
+    style OUT fill:#4CAF50,color:#fff
+```
+
+| 기법            | 설명                                                             |
+| --------------- | ---------------------------------------------------------------- |
+| 이미지 스케일링 | 원본 이미지를 여러 크기로 재조정하여 다양한 크기의 객체 탐지     |
+| 특징 스케일링   | 하르 필터 자체의 크기를 조절하여 다양한 크기의 패턴 검출         |
+| 슬라이딩 윈도우 | 지정 크기 윈도우를 이미지 전체에 걸쳐 이동하며 특징 추출         |
+| 스트라이드      | 슬라이딩 윈도우의 이동 간격 — 작을수록 정밀하지만 연산 비용 증가 |
+
+---
+
+#### 에이다부스트
+
+에이다부스트(AdaBoost, Adaptive Boosting)는 머신 러닝의 **앙상블 부스팅** 기법으로, 성능이 낮은 여러 **약한 학습기(Weak Learner)** 를 순차적으로 결합하여 하나의 강력한 **강한 학습기(Strong Learner)** 를 만든다.
+
+```mermaid
+graph LR
+    D["데이터 가중치\n초기화 (균등)"]
+    L1["약한 학습기 1\n(가중치 반영 학습)"]
+    U1["샘플 가중치 업데이트\n오분류 ↑ / 정분류 ↓"]
+    L2["약한 학습기 2"]
+    U2["샘플 가중치 업데이트"]
+    LN["약한 학습기 N"]
+    C["결합\n(가중 다수결)"]
+    OUT["강한 학습기"]
+
+    D --> L1 --> U1 --> L2 --> U2 --> LN --> C --> OUT
+
+    style OUT fill:#4CAF50,color:#fff
+```
+
+**1단계: 데이터 가중치 초기화**
+
+$N$개의 샘플에 대해 초기 가중치를 균등하게 부여한다.
+
+$$w_i^{(1)} = \frac{1}{N}, \quad i = 1, 2, \ldots, N$$
+
+어떤 샘플이 중요한지 아직 알 수 없으므로 모든 샘플을 동등하게 대우한다.
+
+**2단계: 반복 학습**
+
+$t$번째 반복에서 약한 학습기 $h_t$를 현재 가중치로 학습한 뒤, 가중 오차율을 계산한다.
+
+$$\varepsilon_t = \frac{\displaystyle\sum_{i=1}^{N} w_i^{(t)} \cdot \mathbf{1}[y_i \neq h_t(x_i)]}{\displaystyle\sum_{i=1}^{N} w_i^{(t)}}$$
+
+학습기의 기여도(가중치) $\alpha_t$를 오차율로부터 계산한다. 오차가 낮을수록 $\alpha_t$가 커져 최종 분류에 더 큰 영향을 미친다.
+
+$$\alpha_t = \frac{1}{2} \ln\!\left(\frac{1 - \varepsilon_t}{\varepsilon_t}\right)$$
+
+샘플 가중치를 업데이트한다. 오분류된 샘플의 가중치는 증가하고, 정분류된 샘플의 가중치는 감소하여 다음 학습기가 어려운 샘플에 집중하게 한다.
+
+$$w_i^{(t+1)} = \frac{w_i^{(t)} \cdot \exp\!\left(-\alpha_t \cdot y_i \cdot h_t(x_i)\right)}{Z_t}$$
+
+여기서 $Z_t$는 가중치 합이 1이 되도록 하는 정규화 상수다.
+
+**3단계: 결합**
+
+모든 약한 학습기를 가중 다수결로 결합하여 최종 분류기를 생성한다.
+
+$$H(x) = \text{sign}\!\left(\sum_{t=1}^{T} \alpha_t \cdot h_t(x)\right)$$
+
+**에이다부스트 구성 요소 요약**
+
+| 구성 요소         | 설명                                                            |
+| ----------------- | --------------------------------------------------------------- |
+| 약한 학습기 $h_t$ | 무작위 예측보다 조금 나은 단순 분류기 (예: 단일 결정 트리)      |
+| 가중치 $\alpha_t$ | 학습기의 정확도가 높을수록 크게 설정됨                          |
+| 샘플 가중치 $w_i$ | 오분류될수록 증가 → 다음 학습기가 어려운 샘플에 집중하도록 유도 |
+| 최종 분류 $H(x)$  | 모든 학습기의 가중 합산 후 부호로 결정                          |
+
+```mermaid
+graph TD
+    A["모든 샘플\n동일 가중치 부여"]
+    B["약한 학습기 학습\n(오분류 발생)"]
+    C["오분류 샘플\n가중치 ↑"]
+    D["다음 학습기가\n어려운 샘플에 집중"]
+    E["반복 T회"]
+    F["모든 학습기\n가중 다수결로 결합"]
+    G["강한 학습기 완성"]
+
+    A --> B --> C --> D --> E --> F --> G
+
+    style G fill:#4CAF50,color:#fff
+    style C fill:#f44336,color:#fff
+```
