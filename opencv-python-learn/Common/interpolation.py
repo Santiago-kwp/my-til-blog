@@ -1,4 +1,4 @@
-import numpy as np, math
+import numpy as np, math, cv2
 
 def contain(p, shape):  # 좌표가 (y,x)가 범위 내 인지 검사
     return 0<= p[0] < shape[0] and 0<= p[1] < shape[1]
@@ -64,4 +64,16 @@ def rotate_pt(img, degree, pt):                 # pt 기준 회전 변환 함수
             x, y = np.add((x,y), pt)        # 중심 좌표로 평행 이동
             if contain((y,x), img.shape):   # 입력 영상의 범위 확인
                 dst[i, j] = bilinear_value(img, (x, y))
+    return dst
+
+
+def affine_transform(img, mat): # 어파인 변환 수행 함수
+    rows, cols = img.shape[:2]
+    invMat = cv2.invertAffineTransform(mat) # 어파인 변환의 역행렬
+    size = img.shape[::-1]
+    ## 리스트 생성 방식
+    pts = [np.dot(invMat, (j, i, 1)) for i in range(rows) for j in range(cols)]
+    dst = [bilinear_value(img, p) if contain(p, size) else 0 for p in pts]
+    dst = np.reshape(dst, (rows, cols)).astype('uint8') # 1차원 -> 2차원
+
     return dst
