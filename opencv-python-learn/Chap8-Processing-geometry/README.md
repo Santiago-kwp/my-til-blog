@@ -268,31 +268,98 @@ $$
 
 > 다음은 회전 변환을 수행하는 행렬을 수식으로 나타낸 것이다. 회전 변환의 역행렬이 sin() 함수의 부호만 다르기 때문에 순방향 사상과 역방향 사상도 단지 sin() 함수의 부호만 차이가 난다.
 
-- 순방향 사상: 입력 좌표 $(x, y)$ → 목적 좌표 $(x', y')$
+**순방향 사상**: 입력 좌표 $(x, y)$ → 목적 좌표 $(x', y')$
 
-  $$
-  \begin{bmatrix} x' \\ y' \end{bmatrix}
-  =
-  \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}
-  \begin{bmatrix} x \\ y \end{bmatrix}
-  $$
+$$
+\begin{bmatrix} x' \\ y' \end{bmatrix}
+=
+\begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}
+\begin{bmatrix} x \\ y \end{bmatrix}
+$$
 
-  $$
-  x' = x\cos\theta - y\sin\theta, \quad y' = x\sin\theta + y\cos\theta
-  $$
+$$
+x' = x\cos\theta - y\sin\theta, \quad y' = x\sin\theta + y\cos\theta
+$$
 
-- 역방향 사상: 목적 좌표 $(x', y')$ → 입력 좌표 $(x, y)$ (역행렬 적용 — $\sin$ 부호만 반전)
+**역방향 사상**: 목적 좌표 $(x', y')$ → 입력 좌표 $(x, y)$ (역행렬 적용 — $\sin$ 부호만 반전)
 
-  $$
-  \begin{bmatrix} x \\ y \end{bmatrix}
-  =
-  \begin{bmatrix} \cos\theta & \sin\theta \\ -\sin\theta & \cos\theta \end{bmatrix}
-  \begin{bmatrix} x' \\ y' \end{bmatrix}
-  $$
+$$
+\begin{bmatrix} x \\ y \end{bmatrix}
+=
+\begin{bmatrix} \cos\theta & \sin\theta \\ -\sin\theta & \cos\theta \end{bmatrix}
+\begin{bmatrix} x' \\ y' \end{bmatrix}
+$$
 
-  $$
-  x = x'\cos\theta + y'\sin\theta, \quad y = -x'\sin\theta + y'\cos\theta
-  $$
+$$
+x = x'\cos\theta + y'\sin\theta, \quad y = -x'\sin\theta + y'\cos\theta
+$$
+
+> 목적 영상의 모든 화소$(x', y')$에 대해서 역방향 사상의 수식을 적용하여 입력 화소를 계산하면, 아래 그림과 같이 원점으로부터 시계 방향으로 정해진 각도만큼 회전된 영상이 생성된다. 직교 좌표계에서 회전 변환은 반시계 방향으로 적용된다. 그러나 영상 좌표계에서는 y 좌표가 하단으로 내려갈수록 증가하기 때문에 시계 방향 회전으로 표현됨에 유의한다.
+
+```
+영상 좌표계에서의 회전 (원점 기준, θ = 45°)
+
+  (0,0)──────────────→ x
+    │  ┌───────────┐        ┌──────────────────┐
+    │  │           │  회전   │╲                 │
+    │  │  원본      │  ───▶  │  ╲  (범위 밖      │
+    │  │  영상      │        │   ╲   화소는      │
+    │  │           │        │    ╲  검은색)     │
+    │  └───────────┘        │     ╲            │
+    ↓                       └──────────────────┘
+    y
+  ※ 영상 좌표계는 y가 아래로 증가 → 수학적 반시계가 시계 방향으로 보임
+
+  원점(0,0) 기준 회전의 문제점:
+  ┌──────────┐          ┌──────────┐
+  │▣         │  θ 회전   │          │
+  │   영상    │  ──────▶ │   ╲영상   │  ← 좌상단 원점 기준이라
+  │          │          │    ╲     │     영상이 잘려나감
+  └──────────┘          └──────────┘
+  원점=(0,0)              원점=(0,0)
+
+  중심점(cx,cy) 기준 회전:
+  ┌──────────┐          ┌──────────┐
+  │          │  θ 회전   │  ╲    ╱  │
+  │  ⊕ 중심   │  ──────▶ │   ╲  ╱   │  ← 영상 중심이 고정된 채
+  │          │          │   ╱  ╲   │     회전됨 (자연스러운 결과)
+  └──────────┘          └──────────┘
+  cx=W/2, cy=H/2          cx=W/2, cy=H/2
+```
+
+> 평행 이동과 마찬가지로 목적 영상의 범위를 벗어나는 입력 화소는 제거되며, 입력 영상에서 찾지 못하는 목적 화소는 검은색이나 흰색으로 지정한다.
+
+> 일반적으로 영상을 회전시킬 때에는 회전의 기준을 영상의 기준 원점인 좌상단이 아닌, 물체의 중심(center X, center Y)으로 하는 경우가 많다. 이 경우에는 다음과 같이 평행이동의 수식을 포함하여 회전 변환을 수행한다. 이것은 영상을 원점으로 이동시킨 후, 회전을 수행하고, 다시 기준점 좌표로 이동하는 것이다.
+
+$$
+\begin{bmatrix} x' \\ y' \end{bmatrix}
+=
+\begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}
+\begin{bmatrix} x - c_x \\ y - c_y \end{bmatrix}
++
+\begin{bmatrix} c_x \\ c_y \end{bmatrix}
+$$
+
+$$
+x' = (x - c_x)\cos\theta - (y - c_y)\sin\theta + c_x
+$$
+
+$$
+y' = (x - c_x)\sin\theta + (y - c_y)\cos\theta + c_y
+$$
+
+여기서 $(c_x, c_y)$는 회전 기준이 되는 중심 좌표이며, 영상 전체를 기준으로 할 때는 $c_x = W/2,\ c_y = H/2$ 로 지정한다. 세 단계로 분해하면 다음과 같다.
+
+```mermaid
+flowchart LR
+    A["① 중심으로 평행이동\n(x - cx, y - cy)"]
+    --> B["② 원점 기준 회전\n회전 행렬 R(θ) 적용"]
+    --> C["③ 원래 중심으로 복귀\n(+ cx, + cy)"]
+
+    style A fill:#2196F3,color:#fff
+    style B fill:#FF9800,color:#fff
+    style C fill:#4CAF50,color:#fff
+```
 
 ---
 
