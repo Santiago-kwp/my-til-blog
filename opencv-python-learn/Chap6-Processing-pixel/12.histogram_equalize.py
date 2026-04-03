@@ -1,11 +1,19 @@
+import sys, os, cv2
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from turtledemo.lindenmayer import draw
 
 import numpy as np, cv2
 
 from Common.histogram import draw_histo
 
-image = cv2.imread("images/equalize.jpg", cv2.IMREAD_GRAYSCALE)
-if image is None: raise ValueError("Could not read image from file")
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
+
+# 이미지 경로를 루트 기준으로 설정
+image_path = os.path.join(project_root, "images", "equalize.jpg")
+image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+if image is None: raise Exception("영상파일 읽기 에러")
+
 
 bins, ranges = [256], [0, 256]
 hist = cv2.calcHist([image], [0], None, bins, ranges)
