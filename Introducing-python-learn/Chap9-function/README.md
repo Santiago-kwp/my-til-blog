@@ -1,4 +1,4 @@
-# 9장 함수(Python) 
+# 9장 함수(Python)
 
 ## 9.3 인수와 매개변수
 
@@ -252,4 +252,51 @@ a()
 >>> "We are the knights who say: 'Duck'"
 b()
 >>> "We are the knights who say: 'Hasenpfeffer'"
+```
+
+## 9.8 제너레이터
+
+> 제너레이터는 시퀀스를 생성하는 객체다. 제너레이터로 전체 시퀀스를 한 번에 메모리에 생성하고 정렬할 필요 없이, 잠재적으로 아주 큰 시퀀스를 순회할 수 있다. 제너레이터는 이터레이터에 대한 데이터의 소스로 자주 사용된다. 우리는 이전에 이미 제너레이터 중 하나인 `range()` 함수를 사용했다. range() 는 일련의 정수를 생성한다. 파이썬2의 range()는 메모리에 제한적인 리스트를 반환한다(제너레이터가 아닌 리스트). 또한 파이썬2에서 xrange()가 있는데(제너레이터), 이는 파이썬3의 일반적인 range()가 됐다.
+
+### 9.8.1 제너레이터 함수
+
+> 잠재적으로 큰 시퀀스를 생성하고, 제너레이터 컴프리헨션에 대한 코드가 아주 길다면 제너레이터 함수를 사용하면 된다. 이것은 일반 함수지만 return 문으로 값을 반환하지 않고 yield 문으로 값을 반환한다. 우리만의 range() 함수를 작성해보자.
+
+```python
+def my_range(first=0, last=10, step=1):
+    number = first
+    while number < last:
+        yield number
+        number += step
+
+my_range
+>>> <function my_range at 0x10193e268>
+ranger = my_range(1, 5)
+ranger
+>>> <generator object my_rage at 0x101a0a168>
+
+for x in ranger:
+    print(x)
+
+>>> 1
+>>> 2
+>>> 3
+>>> 4
+```
+
+> 제너레이터는 한 번만 순회할 수 있다. 리스트, 셋, 문자열, 딕셔너리는 메모리에 존재한다. 그러나 제너레이터는 해당 값을 즉석에서 생성하고, 이터레이터를 통해 한 번에 하나씩 전달한다. 제너레이터는 모든 값을 기억하지 않으므로 제너레이터를 다시 시작하거나 되돌릴 수 없다.
+
+### 9.8.2 제너레이터 컴프리헨션
+
+> 제너레이터 컴프리헨션은 대괄호, 중괄호 대신 괄호로 묶어서 사용한다. 제너레이터 컴프리헨션은 제너레이터 함수의 축약 버전이며, 안보이게 yield 문을 실행하고, 제너레이터 객체를 반환한다.
+
+```python
+genobj = (pair for pair in zip(['a', 'b'], ['1', '2']))
+genobj
+>>> <generator object <genexpr> at 0x10308fde0>
+for thing in genobj:
+    print(thing)
+
+>>> ('a', '1')
+>>> ('b', '2')
 ```
