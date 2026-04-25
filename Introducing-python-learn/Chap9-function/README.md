@@ -217,6 +217,13 @@ knights('Ni!')
 
 > 내부 함수는 클로저(closure)처럼 동작할 수 있다. 클로저는 다른 함수에 의해 동적으로 생성된다. 그리고 외부 함수로부터 생성된 변수값을 변경하고, 저장할 수 있는 함수다.
 
+**클로저(Closure)란 무엇인가?**
+클로저는 다음 세 가지 조건을 만족하는 함수를 말합니다.
+
+1. 중첩 함수: 함수 내부에 또 다른 함수(내부 함수)가 정의되어 있다.
+2. 참조: 내부 함수가 외부 함수의 변수(자유 변수)를 참조한다.
+3. 반환: 외부 함수가 내부 함수를 결과값으로 반환한다.
+
 > 다음 예제는 앞 절 '내부 함수'에서 작성한 knights() 예제다. 이 함수를 새로운 knights2() 함수로 정의한다. 이 함수는 이전과는 달리 inner2()라는 클로저를 사용하기 때문에 똑같은 함수가 아니다.
 
 - inner2()는 인수를 취하지 않고, 외부 함수의 변수를 직접적으로 사용한다.
@@ -300,3 +307,115 @@ for thing in genobj:
 >>> ('a', '1')
 >>> ('b', '2')
 ```
+
+## 9.9 데커레이터
+
+> 가끔 코드를 바꾸지 않고, 사용하고 있는 함수를 수정하고 싶을 때가 있다. 일반적인 예는 함수에 전달된 인수를 보기 위해 디버깅 문을 추가하는 것이다.
+
+> 데커레이터(decorator)는 하나의 함수를 취해서 또 다른 함수를 반환하는 함수다. 이 파이썬 트릭을 사용하기 위해서는 다음 기술을 사용한다.
+
+- \*args와 \*\*kwargs
+- 내부 함수
+- 함수 인수
+
+> document_it() 함수는 다음과 같이 데커레이터를 정의한다.
+
+- 함수 이름과 인수를 출력한다.
+- 인수로 함수를 실행한다.
+- 결과를 출력한다.
+- 수정된 함수를 사용하도록 반환한다.
+
+코드는 다음과 같다.
+
+```python
+def document_it(func):
+    def new_function(*args, **kwargs):
+        print('Running function:', func.__name__)
+        print('Positional argument:', args)
+        print('Keyword arguments:', kwargs)
+        result = func(*arg, **kwargs)
+        print('Result:', result)
+        return result
+    return new_function
+```
+
+> document_it() 함수에 어떤 func 함수 이름을 전달하든지 간에 document_it() 함수에 추가 선언문이 포함된 새 함수를 얻는다. 데커레이터는 실제로 func 함수로부터 코드를 실행하지 않는다. 하지만 document_it() 함수로부터 func를 호출하여 결과뿐만 아니라 새로운 함수를 얻는다.
+
+그러면 데커레이터를 어떻게 사용할까? 수동으로 데커레이터를 적용해보자.
+
+```python
+def add_ints(a, b):
+    return a+b
+
+cooler_add_ints = document_it(add_ints) # 데커레이터 수동 할당
+coooler_add_ints(3, 5)
+>>> Running function: add_ints
+>>> Positional arguments: (3, 5)
+>>> Keyword arguments: {}
+>>> Result: 8
+>>> 8
+```
+
+위와 같이 수동으로 데커레이터를 할당하는 대신, 다음과 같이 데커레이터를 사용하고 싶은 함수에 그냥 **@데커레이터\_이름** 을 추가한다.
+
+```python
+@document_it
+def add_int(a, b):
+    return a + b
+
+add_ints(3, 5)
+
+>>> Running function: add_ints
+>>> Positional arguments: (3, 5)
+>>> Keyword arguments: {}
+>>> Result: 8
+>>> 8
+```
+
+**데커레이터와 클로저의 관계**
+
+```python
+def document_it(func):  # 외부 함수
+    def new_function(*args, **kwargs):  # 1. 중첩 함수
+        # 2. 외부 함수의 인자인 func를 내부에서 사용(참조)하고 있음
+        print('Running function:', func.__name__)
+        result = func(*args, **kwargs)
+        return result
+    return new_function  # 3. 내부 함수 자체를 반환
+```
+
+- 외부 함수의 환경 기억: `document_it` 함수가 실행을 마치고 종료되면, 일반적인 경우라면 `func`라는 변수는 메모리에서 사라져야 합니다. 하지만 `new_function`이 `func`를 참조하고 있기 때문에, 파이썬은 이 `func`를 클로저 환경에 저장하여 보존합니다.
+- 데커레이터의 역할: 데커레이터는 단순히 함수를 꾸미는 도구가 아니라, **함수(func)를 전달받아 그 함수를 포함하는 더 큰 기능의 함수(new_function)를 만들어 반환하는 '함수 공장'** 과 같습니다. 이때 전달받은 `func`가 클로저를 통해 계속 유지되기 때문에, 나중에 `new_function`이 호출될 때 원래의 함수를 안전하게 실행할 수 있는 것입니다.
+
+> 함수는 여러 데커레이터를 가질 수 있다. result를 제곱하는 square_it() 데커레이터를 작성해보자
+
+```python
+def square_it(func):
+    def new_function(*args, **kwargs):
+        result = func(*args, **kwargs)
+        return result * result
+    return new_function
+```
+
+함수에서 가장 가까운(def 바로 위) 데커레이터를 먼저 실행한 후, 그 위의 데커레이터가 실행된다. 이 예제에서 순서를 바꿔도 똑같은 result를 얻지만, 중간 과정이 바뀐다.
+
+```python
+@document_it
+@square_it
+def add_ints(a, b):
+    return a + b
+
+add_ints(3, 5)
+>>> Running function: new_function
+>>> Positional arguments: (3, 5)
+>>> Keyword arguments: {}
+>>> Result: 64
+>>> 64
+
+```
+
+## 9.10 네임스페이스와 스코프
+
+> 이름은 사용되는 위치에 따라 다른 것을 참조할 수 있다. 파이썬 프로그램에는 다양한 네임스페이스가 있다. 네임스페이스는 특정 이름이 유일하고, 다른 네임스페이스에서의 같은 이름과 관계가 없는 것을 말한다.
+
+> 각 함수는 자신의 네임스페이스를 정의한다.
