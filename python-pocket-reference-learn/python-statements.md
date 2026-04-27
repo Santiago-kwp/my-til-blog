@@ -665,3 +665,944 @@ for x in G:
 
 - `list(G)`를 하면 함수 내부가 끝까지 다 실행되면서 리스트로 변환되지만,
 - `for` 문이나 `next()`로 하나씩 꺼내 쓰면 **메모리를 극도로 아끼면서도 거대한 데이터를 순차적으로 처리**할 수 있습니다. 이것이 `yield`를 쓰는 가장 큰 이유입니다.
+
+### import 문
+
+> import 문은 모듈 접근 기능을 제공하며, 모듈을 전체적으로 임포트한다. 여러 모듈  중 각 모듈은 모듈명.속성명로 가져온 이름을 포함하낟. 파이썬 파일 최상위의 대입은 모듈 객체 속성을 생성한다. 선택적 as 절은 변수 name을 임포트된 모듈 객체에 대입하고 원래 module 이름을 제거하는데, 이는 긴 모듈 이름이나 패키지 경로를 위한 짧은 동의어를 제공할 때 유용하다. 선택적 package 접두사는 패키지 디렉토리 경로를 표시한다.
+
+```python
+import [package.]* module [as name]
+    [, [package.]* module [as name]]*
+```
+
+
+> module은 대상 모듈을 명명하며, 대개 파이썬 소스 코드나 컴파일된 바이트 코드 파일이다. module은 파일명 확장을 빼고 제공하며, package 경로에 중첩되어 있지 않다면 일반적으로 모듈 검색 경로 디렉토리에 위치해야 한다.
+
+> 프로그램에 의해 모듈이 처음 임포트될 때, 그 소스 코드 파일은 필요할 경우 바이트 코드로 컴파일되며(그리고 가능하면 .pyc 파일로 저장), 대입을 통해 모듈 객체 속성을 생성하기 위해 처음부터 끝까지 수행된다. 파이썬 2.X와 3.1 그리고 그 이전 버전에서, 바이트 코드 파일은 같은 기본명(예를 들어, module.pyc)으로 소스 코드 파일이 있는 디렉터리에 저장된다. 파이썬 3.2 이후부터는 바이트 코드는 소스 코드 파일 디렉터리의 __pycache__라는 하위 디렉터리에 버전을 식별할 수 있는 기본명(예: module.cpython-33.pyc)으로 저장된다.
+
+
+***
+
+#### 1. 먼저 큰 그림: 패키지와 모듈이란?
+
+#### ✅ 모듈(module)
+
+*   **모듈은 하나의 파이썬 파일(.py)** 입니다.
+*   변수, 함수, 클래스 등을 담은 **코드 묶음**이라고 생각하면 됩니다.
+
+```text
+math.py
+my_utils.py
+calculator.py
+```
+
+➡ 이런 파일 각각이 **모듈**
+
+```python
+# my_utils.py
+def add(a, b):
+    return a + b
+```
+
+***
+
+#### ✅ 패키지(package)
+
+*   **여러 모듈을 폴더로 묶은 것**
+*   보통 폴더 안에 여러 `.py` 파일이 있고, (전통적으로는) `__init__.py` 파일이 있음
+
+```text
+mypackage/
+ ├─ __init__.py
+ ├─ module1.py
+ └─ module2.py
+```
+
+➡ `mypackage`가 **패키지**,  
+➡ `module1`, `module2`가 **모듈**
+
+***
+
+#### 2. import 문 형식 해설
+
+#### 원문
+
+```python
+import [package.]* module [as name]
+    [, [package.]* module [as name]]*
+```
+
+#### 구성 요소 하나씩 분해하면:
+
+| 요소         | 의미                   |
+| ---------- | -------------------- |
+| `package.` | 패키지 이름 (여러 단계 가능)    |
+| `module`   | 실제 불러올 모듈            |
+| `as name`  | 모듈 이름에 별명(alias)을 붙임 |
+| `,`        | 여러 모듈을 한 줄에서 임포트 가능  |
+
+***
+
+#### 3. “import 문은 모듈 접근 기능을 제공하며, 모듈을 전체적으로 임포트한다” 의미
+
+#### ✅ 핵심 의미
+
+```python
+import math
+```
+
+*   `math` **모듈 전체**를 메모리로 불러옴
+*   모듈 안의 내용은 **math.이름** 형태로 접근
+
+```python
+import math
+
+print(math.pi)
+print(math.sqrt(16))
+```
+
+❌ 이렇게는 접근 불가:
+
+```python
+print(pi)       # NameError
+print(sqrt(4))  # NameError
+```
+
+👉 **모듈 전체를 그대로 가져오므로 접두사 `math.`가 필요**
+
+***
+
+#### 4. “각 모듈은 모듈명.속성명으로 가져온 이름을 포함한다” 설명
+
+#### 이 문장의 의미
+
+*   모듈 안에 정의된 모든 것(변수, 함수, 클래스)은  
+    **모듈 객체의 속성(attribute)** 이 됨
+
+```python
+# mymod.py
+x = 10
+
+def func():
+    print("hello")
+```
+
+```python
+import mymod
+
+print(mymod.x)      # 10
+mymod.func()        # hello
+```
+
+➡ `x`, `func`는 **mymod 객체의 속성**
+➡ `mymod.x`, `mymod.func()` 형태로 접근
+
+***
+
+#### 5. “파이썬 파일 최상위의 대입은 모듈 객체 속성을 생성한다”
+
+#### 쉽게 말하면:
+
+> **모듈 파일(.py) 안에서 맨 위 레벨에서 선언한 것은 전부 모듈의 속성이 된다**
+
+```python
+# example.py
+a = 100          # 최상위 대입
+b = "hello"
+
+def foo():
+    pass
+```
+
+```python
+import example
+
+print(example.a)    # 100
+print(example.b)    # hello
+example.foo()
+```
+
+✅ `a`, `b`, `foo` → 전부 `example` 모듈의 속성
+
+❌ 함수 안에서 만든 변수는 속성이 아님
+
+```python
+def bar():
+    c = 10
+
+# example.c 는 존재하지 않음
+```
+
+***
+
+#### 6. “as 절은 긴 모듈 이름이나 패키지 경로를 위한 짧은 동의어”
+
+#### 기본 예제
+
+```python
+import numpy
+```
+
+```python
+numpy.array([1, 2, 3])
+```
+
+👇 보통 이렇게 씀:
+
+```python
+import numpy as np
+```
+
+```python
+np.array([1, 2, 3])
+```
+
+#### 즉,
+
+*   `as`는 **별명(alias)**
+*   원래 이름 대신 **짧고 편한 이름으로 사용**
+
+***
+
+#### 7. “원래 module 이름을 제거한다”의 정확한 의미
+
+```python
+import numpy as np
+```
+
+이 경우,
+
+✅ 사용 가능:
+
+```python
+np.zeros(3)
+```
+
+❌ 사용 불가:
+
+```python
+numpy.zeros(3)  # NameError
+```
+
+➡ `numpy`라는 이름은 **현재 네임스페이스에서 사라짐**
+➡ `np`만 존재
+
+***
+
+#### 8. “선택적 package 접두사는 패키지 디렉토리 경로를 표시”
+
+#### 패키지 경로 예제
+
+```text
+mypkg/
+ ├─ __init__.py
+ └─ tools/
+     ├─ __init__.py
+     └─ math_utils.py
+```
+
+```python
+import mypkg.tools.math_utils
+```
+
+이때:
+
+*   `mypkg` → 패키지
+*   `tools` → 하위 패키지
+*   `math_utils` → 모듈
+
+사용:
+
+```python
+mypkg.tools.math_utils.some_function()
+```
+
+또는:
+
+```python
+import mypkg.tools.math_utils as mu
+mu.some_function()
+```
+
+***
+
+#### 9. “module은 파일명 확장을 빼고 제공한다” 의미
+
+✅ 올바른 방식:
+
+```python
+import mymodule
+```
+
+❌ 틀린 방식:
+
+```python
+import mymodule.py
+```
+
+*   파이썬이 내부적으로 `.py`, `.pyc`, `.so` 등을 찾아줌
+*   사용자는 **확장자 없이 이름만 지정**
+
+***
+
+#### 10. “모듈 검색 경로(sys.path)”가 의미하는 것
+
+#### 파이썬이 모듈을 찾는 위치
+
+```python
+import sys
+print(sys.path)
+```
+
+일반적으로 포함되는 경로:
+
+1.  현재 실행 중인 파일의 디렉토리
+2.  가상환경 / 설치된 라이브러리 경로
+3.  표준 라이브러리 경로
+
+➡ 모듈이 **이 경로 중 하나에 있어야 import 가능**
+
+***
+
+#### 11. 한 문장 요약 정리
+
+> ✅ `import` 문은  
+> **패키지 경로에 있는 모듈 파일(.py)을 찾아서**,  
+> **모듈 객체로 메모리에 로드하고**,  
+> **모듈명(또는 별명)을 통해 그 안의 변수·함수·클래스에 접근하게 해준다**
+
+***
+
+
+
+### 패키지 임포트
+
+> 정규 패키지에서 임포트문에 기입된 각각의 디렉터리에는 (대부분의 경우 비어있는) __init__.py 파일이 있어야 하는데, 이 파일은 디렉터리 레벨의 모듈 이름 공간 역할을 한다. 이 파일은 디렉터리를 통한 첫 임포트 시 실행되며, __init__.py 파일에 대입된 모든 이름은 디렉터리 모듈 객체의 속성이 된다.
+
+### assert 문
+
+```python
+assert expression [, message]
+```
+
+> assert 문은 디버깅 확인을 위해 수행한다. 만약 expression이 거짓이면 AssertionError를 발생시키고, message가 제공됐다면 그것을 생성자 인자로 전달한다. -0 명령 라인 플래그는 assert 문을 제거한다(포함되지도 않고 실행되지도 않는다)
+
+***
+
+#### 1. assert 문 기본 형태
+
+```python
+assert expression [, message]
+```
+
+구성 요소부터 정리해보면:
+
+| 요소           | 의미                          |
+| ------------ | --------------------------- |
+| `assert`     | “이 조건이 반드시 참이어야 한다”고 선언     |
+| `expression` | 검사할 조건식 (True / False로 평가됨) |
+| `message`    | 조건이 거짓일 때 함께 출력할 설명(선택)     |
+
+***
+
+#### 2. assert 문의 핵심 개념 한 문장 요약
+
+> **assert는 “이 지점에 도달했을 때 반드시 참이어야 하는 조건”을 코드로 명시하는 디버깅용 검사 장치이다.**
+
+***
+
+#### 3. “assert 문은 디버깅 확인을 위해 수행한다” 설명
+
+#### ✓ 의미
+
+*   `assert`는 **프로그램의 정상 동작을 보장하기 위한 가정(assumption)** 을 코드에 적어두는 것
+*   주 목적은 **버그를 빨리 발견**하는 것
+*   일반적인 입력 검증이나 예외 처리용이 아님
+
+#### 예제
+
+```python
+def divide(a, b):
+    assert b != 0
+    return a / b
+```
+
+*   개발자는 “이 함수에 들어올 때 b는 0이 아니어야 한다”라고 **가정**
+*   가정이 깨지면 즉시 오류로 종료 → 문제 위치를 바로 알 수 있음
+
+***
+
+#### 4. “expression이 거짓이면 AssertionError를 발생시킨다”
+
+#### 동작 방식
+
+```python
+assert expression
+```
+
+은 내부적으로 다음과 같은 의미입니다:
+
+```python
+if not expression:
+    raise AssertionError
+```
+
+#### 예제
+
+```python
+x = -1
+assert x > 0
+```
+
+실행 결과:
+
+```text
+AssertionError
+```
+
+#### True일 경우
+
+```python
+assert 3 > 1
+print("정상 실행")
+```
+
+출력:
+
+    정상 실행
+
+➡ 조건이 참이면 **아무 일도 일어나지 않고 그냥 통과**
+
+***
+
+#### 5. “message가 제공됐다면 그것을 생성자 인자로 전달한다”
+
+#### 이 말이 뜻하는 것
+
+```python
+assert 조건, 메시지
+```
+
+는 내부적으로 다음과 같습니다:
+
+```python
+if not 조건:
+    raise AssertionError(메시지)
+```
+
+#### 예제
+
+```python
+age = -5
+assert age >= 0, "나이는 음수가 될 수 없습니다"
+```
+
+출력:
+
+```text
+AssertionError: 나이는 음수가 될 수 없습니다
+```
+
+➡ 메시지는 **오류의 원인을 설명하는 디버깅 힌트**
+
+***
+
+#### 6. AssertionError는 어떤 오류인가?
+
+*   파이썬에 **기본 내장된 예외 클래스**
+*   개발자의 가정이 깨졌을 때 사용
+
+```python
+try:
+    assert False, "실패"
+except AssertionError as e:
+    print(e)
+```
+
+출력:
+
+    실패
+
+***
+
+#### 7. assert는 return이나 if와 무엇이 다른가?
+
+#### if + raise
+
+```python
+if x < 0:
+    raise ValueError("x는 음수가 될 수 없음")
+```
+
+👉 **사용자 입력 오류 처리**
+
+***
+
+#### assert
+
+```python
+assert x >= 0
+```
+
+👉 **개발자가 코드 논리를 스스로 검증**
+
+> ✅ 핵심 차이:
+>
+> *   `assert`: 개발자 실수
+> *   `raise`: 사용자 / 실행 환경 문제
+
+***
+
+#### 8. “-O 명령 라인 플래그는 assert 문을 제거한다”
+
+⚠️ 이 부분이 assert에서 가장 중요한 개념입니다.
+
+***
+
+#### 8.1 -O 옵션이란?
+
+```bash
+python -O script.py
+```
+
+*   `-O` 는 **Optimize(최적화) 모드**
+*   이 모드에서는 **모든 assert 문이 완전히 무시됨**
+
+***
+
+#### 8.2 “제거한다(포함되지도 않고 실행되지도 않는다)”의 정확한 의미
+
+#### 일반 실행
+
+```python
+assert False
+print("hello")
+```
+
+실행 결과:
+
+```text
+AssertionError
+```
+
+***
+
+#### 최적화 모드 실행
+
+```bash
+python -O script.py
+```
+
+실행 결과:
+
+```text
+hello
+```
+
+👉 `assert False` **라인 자체가 존재하지 않는 것처럼 동작**
+
+***
+
+#### 8.3 중요한 결론
+
+✅ **assert에 프로그램 핵심 로직을 넣으면 안 된다**
+
+❌ 잘못된 예:
+
+```python
+assert check_permission(user)
+```
+
+*   최적화 모드에서는 **보안 체크 자체가 사라짐**
+
+✅ 올바른 용도:
+
+```python
+assert isinstance(x, int)
+```
+
+***
+
+#### 9. assert를 언제 써야 할까?
+
+#### ✅ 좋은 사용 예
+
+*   내부 상태 검증
+*   불변 조건(invariant) 검사
+*   개발 중 논리 오류 확인
+
+```python
+def push(stack, item):
+    old_len = len(stack)
+    stack.append(item)
+    assert len(stack) == old_len + 1
+```
+
+***
+
+#### ❌ 나쁜 사용 예
+
+*   사용자 입력 검증
+*   파일 존재 확인
+*   네트워크 / DB 상태 체크
+
+```python
+# 절대 이렇게 쓰지 말 것
+assert os.path.exists("data.txt")
+```
+
+***
+
+#### 10. assert vs 예외 처리 비교 요약
+
+| 구분     | assert | 예외 처리      |
+| ------ | ------ | ---------- |
+| 목적     | 디버깅    | 정상적인 오류 처리 |
+| 비활성화   | 가능(-O) | 불가능        |
+| 사용자 대응 | ❌      | ✅          |
+| 권장 위치  | 개발 단계  | 운영 코드      |
+
+***
+
+#### 11. 질문에 나온 설명 문장 한 줄씩 요약 정리
+
+> **assert 문은 디버깅 확인을 위해 수행한다**  
+> → 개발자의 가정을 검사하는 용도
+
+> **expression이 거짓이면 AssertionError를 발생시킨다**  
+> → 조건 검사 실패 시 즉시 오류
+
+> **message가 제공되면 생성자 인자로 전달한다**  
+> → 오류 메시지로 출력됨
+
+> **-O 플래그는 assert 문을 제거한다**  
+> → 최적화 모드에서는 assert가 존재하지 않음
+
+***
+
+### with 문
+
+> 컨텍스트 매니저(context manager)를 사용하여 자원을 생성(획득) -> 사용 -> 자동 정리(반납)을 보장하는 문법
+
+> 가장 대표적인 자원이 바로:
+- 파일
+- 락(lock)
+- 네트워크 연결
+- 데이터베이스 커서
+
+```python
+with expression [as variable]:  # 3.0/2.6. + 
+    suite
+
+with expression [as variable]
+        [, expression [as variable]]*:  # 3.1/2.7. +
+    suite
+```
+
+- expression: 컨텍스트 매니저 객체를 반환해야 함
+    - 예: `open()`
+- as variable: 그 객체를 받을 변수
+
+
+> 자원을 획득하고, 사용하고, 반납할 때 주로 사용한다. 
+
+```python
+f = open('myFile.txt', 'w', encoding='utf8')
+f.write("test")
+f.close()
+```
+
+> 다음과 같이 좀 더 간결하고, 안전하게 사용할 수 있다.
+
+```python
+with open('mytextfile.txt', 'w', encoding='utf8') as f:
+    f.write("test")
+```
+
+
+> with 문은 컨텍스트 관리자 코드의 중첩된 블록을 감싸며, 블록 엔트리 작업을 실행할 수 있다. 그리고 예외 발생 여부와 상관없이 그 블록 종료 작업이 실행되도록 보장한다. with는 컨텍스트 관리자를 가진 객체에 한해 종료 작업에 대한 try/finally의 대안이 될 수 있다. 
+
+> expression은 컨텍스트 관리자 프로토콜을 지원하는 객체를 반환한다고 가정한다. 이 객체는 생략 가능한 as 절이 존재할 경우, variable에 대입될 값 또한 반환할 수 있다. 클래스들은 컨텍스트 관리자를 커스터마이징해 정의할 수 있으며, 파일 및 스레드 같은 일부 내장 자료형은 파일을 닫거나 스레드 잠금을 푸는 등의 종료 작업을 할 수 있는 컨텍스트 관리자를 제공한다.
+
+### 컨텍스트 관리자
+
+#### 1. 컨텍스트 관리자(Context Manager)란?
+
+#### 한 문장 정의
+
+> **컨텍스트 관리자란 “특정 코드 블록의 시작과 끝에서 자동으로 수행되어야 할 동작을 정의한 객체”이다.**
+
+주로 다루는 대상은 **자원(resource)** 입니다.
+
+#### 자원의 예
+
+*   파일 (열기 → 닫기)
+*   락(lock) (획득 → 해제)
+*   데이터베이스 연결 (연결 → 종료)
+*   트랜잭션 (시작 → 커밋/롤백)
+
+➡ 공통점:  
+**사용 전 준비 작업 + 사용 후 정리 작업이 반드시 필요**
+
+***
+
+#### 2. 왜 컨텍스트 관리자가 필요한가?
+
+#### 기존 방식: try / finally
+
+```python
+f = open("data.txt", "w")
+try:
+    f.write("hello")
+finally:
+    f.close()
+```
+
+*   ✅ 예외가 발생해도 `close()` 실행 보장
+*   ❌ 코드가 장황하고 반복적
+*   ❌ 중첩되면 가독성 급락
+
+***
+
+#### with 문 사용
+
+```python
+with open("data.txt", "w") as f:
+    f.write("hello")
+```
+
+*   ✅ 짧음
+*   ✅ 안전함
+*   ✅ 예외 발생 여부와 관계없이 정리 작업 수행
+
+➡ `with` 문은 **try/finally의 구조적 대체재**
+
+***
+
+#### 3. 설명 문장 1 해설
+
+> **with 문은 컨텍스트 관리자 코드의 중첩된 블록을 감싸며,  
+> 블록 엔트리 작업을 실행할 수 있다.  
+> 그리고 예외 발생 여부와 상관없이 그 블록 종료 작업이 실행되도록 보장한다.**
+
+#### 이 말을 풀면
+
+*   `with` 블록에 들어갈 때  
+    → **엔트리(entry) 작업 실행**
+*   `with` 블록을 나갈 때  
+    → **종료(exit) 작업 자동 실행**
+*   중간에 예외가 발생해도  
+    → **종료 작업은 반드시 실행**
+
+즉,
+
+```text
+enter → (사용) → exit
+```
+
+이 구조를 **언어 차원에서 강제**해주는 것이 `with`
+
+***
+
+#### 4. 컨텍스트 관리자 프로토콜이란?
+
+#### 핵심 정의
+
+> **컨텍스트 관리자 프로토콜은  
+> `__enter__()`와 `__exit__()` 두 메서드를 구현하는 규약이다.**
+
+이 두 메서드를 가진 객체를  
+➡ **컨텍스트 관리자**라고 부를 수 있습니다.
+
+***
+
+#### 필수 메서드
+
+```python
+__enter__(self)
+__exit__(self, exc_type, exc_value, traceback)
+```
+
+***
+
+#### 5. with 문의 내부 동작 순서 (중요)
+
+다음 코드를 예로 들면:
+
+```python
+with expression as variable:
+    suite
+```
+
+#### 실제 내부 동작은 개념적으로 다음과 같습니다:
+
+```python
+manager = expression
+value = manager.__enter__()
+try:
+    variable = value
+    suite
+finally:
+    manager.__exit__(예외정보)
+```
+
+***
+
+#### 단계별 설명
+
+1️⃣ `expression` 평가  
+→ 컨텍스트 관리자 객체 생성
+
+2️⃣ `__enter__()` 호출  
+→ 반환값이 있다면 `as variable`에 대입
+
+3️⃣ 블록 수행 (`suite`)
+
+4️⃣ **항상** `__exit__()` 호출
+
+*   예외 없으면 → `exc_type = None`
+*   예외 있으면 → 예외 정보 전달
+
+***
+
+#### 6. 설명 문장 2 해설
+
+> **expression은 컨텍스트 관리자 프로토콜을 지원하는 객체를 반환한다고 가정한다.**
+
+즉:
+
+*   `with` 문은 **아무 객체나 받을 수 없음**
+*   반드시 **`__enter__`와 `__exit__`를 가진 객체**
+
+```python
+# 가능
+with open(...) as f:
+
+# 불가능
+with 123:
+```
+
+***
+
+> **이 객체는 생략 가능한 as 절이 존재할 경우, variable에 대입될 값 또한 반환할 수 있다.**
+
+#### 의미
+
+*   `__enter__()`의 반환값이  
+    → `as 변수`로 들어감
+
+```python
+with open("a.txt") as f:
+    pass
+```
+
+➡ `f`는 `open()`이 아니라  
+➡ `open().__enter__()`의 반환값
+
+***
+
+#### 7. 내장 컨텍스트 관리자의 예
+
+#### ✅ 파일 객체
+
+```python
+with open("file.txt") as f:
+    pass
+```
+
+*   `__enter__()` : 파일 열기
+*   `__exit__()` : 파일 닫기
+
+***
+
+#### ✅ 락(lock)
+
+```python
+with lock:
+    critical_section()
+```
+
+*   `__enter__()` : 락 획득
+*   `__exit__()` : 락 해제
+
+***
+
+#### ✅ 데이터베이스 트랜잭션
+
+```python
+with conn:
+    cursor.execute(...)
+```
+
+*   정상 종료 → commit
+*   예외 발생 → rollback
+
+***
+
+#### 8. 커스텀 컨텍스트 관리자 만들기
+
+```python
+class MyContext:
+    def __enter__(self):
+        print("enter")
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        print("exit")
+```
+
+```python
+with MyContext() as ctx:
+    print("inside")
+```
+
+출력:
+
+    enter
+    inside
+    exit
+
+***
+
+#### 9. 예외와 **exit**
+
+```python
+def __exit__(self, exc_type, exc_value, traceback):
+    return True  # 예외를 삼킴
+```
+
+*   `True` 반환 → 예외 무시
+*   `False` / None → 예외 전파
+
+이 점 때문에 컨텍스트 관리자는  
+**정리 + 예외 처리 제어**까지 가능
+
+***
+
+#### 10. 설명 문장 전체 요약 번역
+
+> ✅ with 문은  
+> **코드 블록의 시작과 종료 시점을 기준으로  
+> 자동으로 실행할 작업을 정의할 수 있게 해주며,  
+> 예외가 발생해도 종료 작업을 보장한다.**
+
+> ✅ 이를 위해 with는  
+> **`__enter__` / `__exit__`라는 프로토콜을 구현한 객체만을 사용한다.**
+
+> ✅ 파일, 락, 스레드 등은  
+> 이미 이러한 컨텍스트 관리자를 제공한다.
+
+***
+
+## ✅ 최종 핵심 요약
+
+*   **컨텍스트 관리자**:  
+    “블록 전후 작업을 자동화한 객체”
+*   **컨텍스트 관리자 프로토콜**:  
+    `__enter__`, `__exit__` 메서드 규약
+*   **with 문**:  
+    try/finally를 문법 수준에서 안전하게 추상화한 구조
+
+***
+
+
