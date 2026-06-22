@@ -205,4 +205,4 @@ startActivity(intent)
 
 >웹 개발에서 클라이언트의 요청(Request)을 받아 데이터를 꺼내고(getParameter), 모델에 데이터를 담아(addAttribute), 다음 페이지로 이동(redirect)시키는 일련의 과정이 있듯이,
 
->안드로이드에서는 그 과정을 Intent 객체 생성 👉 putExtra로 데이터 담기 👉 startActivity로 화면 이동 👉 새 화면에서 get...Extra로 데이터 꺼내기 라는 공식(API)으로 안드로이드 프레임워크가 제공하고 있음.
+>안드로이드에서는 그 과정을 Intent 객체 생성 👉 putExtra로 데이터 담기 👉 startActivity로 화면 이동 👉 새 화면에서 get...Extra로 데이터 꺼내기 라는 공식(API)으로 안드로이드 프레임워크가 제공하고 있음!
