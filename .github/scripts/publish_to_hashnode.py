@@ -111,11 +111,22 @@ def main():
     # --- 추가된 핵심 로직: 기존 글 검색 ---
     existing_post_id = None
     if HASHNODE_BLOG_HOST:
-        posts_resp = requests.post(
+        fetch_response = requests.post(
             HASHNODE_API_URL,
             json={'query': GET_POSTS_QUERY, 'variables': {'host': HASHNODE_BLOG_HOST}},
             headers=headers
-        ).json()
+        )
+        # 1. 응답이 정상이 아닌 경우 에러 출력 후 종료
+        if fetch_response.status_code != 200:
+            print(f"❌ Failed to fetch existing posts. HTTP Status: {fetch_response.status_code}")
+            print(f"Error Details: {fetch_response.text}")
+            sys.exit(1)
+            
+        try:
+            posts_resp = fetch_response.json()
+        except Exception as e:
+            print(f"❌ Failed to parse JSON. Response Text: {fetch_response.text}")
+            sys.exit(1)
         
         # 제목이 똑같은 글이 있는지 검사
         if 'data' in posts_resp and posts_resp['data']['publication']:
