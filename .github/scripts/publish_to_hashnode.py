@@ -129,7 +129,7 @@ def main():
             sys.exit(1)
         
         # 제목이 똑같은 글이 있는지 검사
-        if 'data' in posts_resp and posts_resp['data']['publication']:
+        if 'data' in posts_resp and posts_resp['data'].get('publication'):
             recent_posts = posts_resp['data']['publication']['posts']['edges']
             for edge in recent_posts:
                 if edge['node']['title'] == title:
