@@ -1,53 +1,54 @@
-name: Publish to Hashnode
+# Hashnode 자동 배포 지원 종료로 중단
+# name: Publish to Hashnode
 
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - "**/*.md" # 모든 하위 폴더의 마크다운 파일 변경 감지
-      - "!.github/**" # 단, .github 폴더 안의 파일은 제외
+# on:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - "**/*.md" # 모든 하위 폴더의 마크다운 파일 변경 감지
+#       - "!.github/**" # 단, .github 폴더 안의 파일은 제외
 
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+# jobs:
+#   publish:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@v3
 
-      - name: Find changed markdown files
-        id: changed_files
-        uses: tj-actions/changed-files@v35
-        with:
-          files: |
-            **/*.md
-          files_ignore: |
-            .github/**
-            README.md # 최상위 레포지토리 소개 리드미는 제외
+#       - name: Find changed markdown files
+#         id: changed_files
+#         uses: tj-actions/changed-files@v35
+#         with:
+#           files: |
+#             **/*.md
+#           files_ignore: |
+#             .github/**
+#             README.md # 최상위 레포지토리 소개 리드미는 제외
 
-      - name: Set up Python
-        if: steps.changed_files.outputs.any_changed == 'true'
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
+#       - name: Set up Python
+#         if: steps.changed_files.outputs.any_changed == 'true'
+#         uses: actions/setup-python@v4
+#         with:
+#           python-version: "3.10"
 
-      - name: Install Python Dependencies
-        if: steps.changed_files.outputs.any_changed == 'true'
-        run: |
-          python -m pip install --upgrade pip
-          pip install python-frontmatter requests
+#       - name: Install Python Dependencies
+#         if: steps.changed_files.outputs.any_changed == 'true'
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install python-frontmatter requests
 
-      - name: Run publisher script for each changed file
-        if: steps.changed_files.outputs.any_changed == 'true'
-        env:
-          HASHNODE_PAT: ${{ secrets.HASHNODE_PAT }}
-          HASHNODE_PUBLICATION_ID: ${{ secrets.HASHNODE_PUBLICATION_ID }}
-          # 이미지 URL 변환을 위해 현재 레포 정보 전달
-          GITHUB_REPO: ${{ github.repository }}
-          GITHUB_BRANCH: ${{ github.ref_name }}
-          HASHNODE_BLOG_HOST: "itsantiago.hashnode.dev"
-        run: |
-          for file in ${{ steps.changed_files.outputs.all_changed_files }}; do
-            echo ">> Processing $file..."
-            python .github/scripts/publish_to_hashnode.py "$file"
-          done
+#       - name: Run publisher script for each changed file
+#         if: steps.changed_files.outputs.any_changed == 'true'
+#         env:
+#           HASHNODE_PAT: ${{ secrets.HASHNODE_PAT }}
+#           HASHNODE_PUBLICATION_ID: ${{ secrets.HASHNODE_PUBLICATION_ID }}
+#           # 이미지 URL 변환을 위해 현재 레포 정보 전달
+#           GITHUB_REPO: ${{ github.repository }}
+#           GITHUB_BRANCH: ${{ github.ref_name }}
+#           HASHNODE_BLOG_HOST: "itsantiago.hashnode.dev"
+#         run: |
+#           for file in ${{ steps.changed_files.outputs.all_changed_files }}; do
+#             echo ">> Processing $file..."
+#             python .github/scripts/publish_to_hashnode.py "$file"
+#           done
