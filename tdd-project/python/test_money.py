@@ -1,17 +1,42 @@
 import unittest # TestCase 슈퍼클래스 사용에 필요한 unittest 패키지를 가져온다.
 
-class Dollar:
-    def __init__(self, amount):
+class Money:
+    def __init__(self, amount, currency):
         self.amount = amount
-
+        self.currency = currency
+    
+    def __eq__(self, other):
+        return self.amount == other.amount and self.currency == other.currency
+    
     def times(self, multiplier):
-        return Dollar(self.amount * multiplier)
+        return Money(self.amount * multiplier, self.currency)
+    def divide(self, divisor):
+        return Money(self.amount / divisor, self.currency)
 
 class TestMoney(unittest.TestCase): # unittest.TestCase 클래스의 자식 클래스가 돼야하는 테스트 클래스다.
-    def testMultiplication(self): # 테스트 메소드로 인정되기 위해 메소드 이름은 test로 시작해야 한다.
-        fiver = Dollar(5) # USD 5. 를 표현하는 객체로 Dollar는 아직 존재하지 않는다.
+    def testMultiplicationInDollars(self): # 테스트 메소드로 인정되기 위해 메소드 이름은 test로 시작해야 한다.
+        fiver = Money(5,"USD") # USD 5. 를 표현하는 객체로 Dollar는 아직 존재하지 않는다.
         tenner = fiver.times(2) # 테스트 대상 메소드인 times로 아직 존재하지 않는다.
         self.assertEqual(10, tenner.amount) # assertEqual 단언문으로 실제값과 예상값을 비교한다.
+        self.assertEqual("USD",tenner.currency)
+
+    def testMultiplicationInEuros(self):
+        tenEuros = Money(10, "EUR")
+        twentyEuros = tenEuros.times(2)
+        self.assertEqual(20, twentyEuros.amount)
+        self.assertEqual("EUR", twentyEuros.currency)
+
+    def testDivision(self):
+        originalMoney = Money(4002, "KRW")
+        actualMoneyAfterDivision = originalMoney.divide(4)
+        expectedMoneyAfterDivision = Money(1000.5, "KRW")
+        self.assertEqual(expectedMoneyAfterDivision.amount, actualMoneyAfterDivision.amount)
+        self.assertEqual(expectedMoneyAfterDivision.currency, actualMoneyAfterDivision.currency)
+    
+    def testMultiplicationInKRW(self):
+        fiveThousandsWon = Money(5000,"KRW")
+        tenThousandsWon = Money(10000,"KRW")
+        self.assertEqual(tenThousandsWon, fiveThousandsWon.times(2))
 
 
 if __name__ == '__main__':
