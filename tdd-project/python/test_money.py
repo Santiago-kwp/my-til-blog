@@ -1,5 +1,12 @@
 import unittest # TestCase 슈퍼클래스 사용에 필요한 unittest 패키지를 가져온다.
 
+class Dollar:
+    def __init__(self, amount):
+        self.amount = amount
+
+    def times(self, multiplier):
+        return Dollar(self.amount * multiplier)
+
 class TestMoney(unittest.TestCase): # unittest.TestCase 클래스의 자식 클래스가 돼야하는 테스트 클래스다.
     def testMultiplication(self): # 테스트 메소드로 인정되기 위해 메소드 이름은 test로 시작해야 한다.
         fiver = Dollar(5) # USD 5. 를 표현하는 객체로 Dollar는 아직 존재하지 않는다.
