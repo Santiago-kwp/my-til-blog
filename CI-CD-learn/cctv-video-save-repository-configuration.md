@@ -149,3 +149,72 @@ Sources:
 - [How MinIO Community Edition Ended — Timeline](https://www.youngju.dev/blog/2026-07-17-minio-archived-garage-seaweedfs-ceph-rgw.en)
 - [MinIO is archived: self-hosted S3-compatible storage compared (WZ-IT)](https://wz-it.com/en/blog/minio-successor-s3-storage-comparison/)
 - [RustFS vs SeaweedFS vs Garage (Elestio)](https://blog.elest.io/rustfs-vs-seaweedfs-vs-garage-which-minio-alternative-should-you-pick/)
+
+---
+
+그 조건이라면 S3 서버(SeaweedFS)는 과합니다. **Windows를 그대로 두고, 데이터 디스크만 분리해서 "분석 전용 PC"로 쓰는 구성**이 가장 현실적입니다. 지금 쓰고 계신 Windows용 파이썬 스크립트도 그대로 돌아갑니다.
+
+## 핵심 원칙: OS와 데이터를 분리
+
+나중에 새 직원이 이 PC를 쓰게 될 때를 대비해, 처음부터 다음처럼 나눠 둡니다.
+
+- **C: 드라이브(기존 디스크)**: Windows와 프로그램만 둡니다.
+- **새 내장 HDD 2개**: 하천 영상과 결과 전용입니다. Windows의 **저장소 공간(Storage Spaces)** 으로 양방향 미러를 만들어 `D:` 같은 드라이브 하나로 씁니다.
+
+저장소 공간은 Windows Home과 Pro 모두에서 쓸 수 있고, 디스크를 통째로 다른 Windows PC로 옮기면 그대로 인식됩니다. 그래서 나중에 이 PC를 직원에게 넘기더라도 HDD 두 개만 빼서 다른 PC로 옮기면 영상 저장소가 그대로 따라갑니다. 포맷도 재설치도 필요 없습니다.
+
+## 구성 방법
+
+**① 공유 폴더**
+`D:\river-data`를 네트워크 공유로 엽니다. 다른 PC에서는 `\\분석PC\river-data`로 접근하고, 파이썬에서도 이 경로를 그대로 쓸 수 있습니다. 권한은 영상 업로드 담당자만 쓰기, 나머지는 읽기 전용으로 나눠 원본이 실수로 지워지지 않게 합니다.
+
+```
+D:\river-data\
+  raw\        원본 영상 (site/event/camera)
+  benchmark\  golden set 클립
+  catalog\    메타데이터·정답값 (Git으로도 관리)
+  results\    평가 결과 (run별 폴더)
+```
+
+**② Jenkins Windows agent**
+이 PC를 Jenkins agent로 등록하고 Windows 서비스로 설치합니다. 라벨을 `analysis-win`처럼 붙여 두면 평가 job이 이 PC에서 실행됩니다. PC가 꺼져 있으면 job은 Jenkins 큐에서 대기하다가 PC가 켜지면 자동으로 실행되므로, 24시간 켜둘 필요가 없습니다.
+
+**③ 파이썬 환경 고정**
+`uv`나 `conda`로 가상환경을 만들고, 패키지 버전 목록(lock 파일)을 GitHub 저장소에 함께 둡니다. 그러면 다른 사람 PC나 나중에 옮길 PC에서도 같은 환경을 한 번에 재현할 수 있습니다. Docker는 이 단계에서는 쓰지 않아도 됩니다.
+
+**④ 원격으로 켜고 쓰기**
+
+- BIOS와 네트워크 어댑터 설정에서 **Wake-on-LAN**을 켜 두면, 필요할 때 원격으로 PC를 깨울 수 있습니다.
+- 절전 진입 시간을 넉넉히(예: 2~3시간) 두면, 분석 job이 끝난 뒤 알아서 잠듭니다.
+- 원격 데스크톱으로 접속하려면 Windows Pro여야 합니다. Home이라면 Jenkins 화면에서 실행과 결과 확인만 하는 방식으로 충분합니다.
+
+**⑤ Windows 업데이트**
+'사용 시간'을 업무 시간으로 지정해, 분석 중에 업데이트 재부팅이 일어나지 않게 합니다.
+
+## 백업
+
+미러는 디스크 고장만 막아 줍니다. 원본 영상은 따로 복사본이 있어야 합니다.
+
+- 외장 HDD를 이 PC에 연결해 두고, 작업 스케줄러로 `robocopy`를 주기적으로 돌립니다.
+  ```
+  robocopy D:\river-data\raw E:\backup\raw /E /XO /R:2 /W:5 /LOG+:E:\backup\log.txt
+  ```
+  (`/XO`는 이미 있는 파일은 건너뛰고 새 파일만 복사)
+- 미니 산업용 PC가 있다면 그쪽 외장 HDD를 백업 대상으로 써도 됩니다. 같은 PC에 있는 백업보다 안전합니다.
+
+PC가 항상 켜져 있지 않으므로, 백업 작업은 '예약 시간을 놓치면 다음 부팅 때 실행' 옵션을 켜 둡니다.
+
+## 나중에 직원이 이 PC를 쓰게 되면
+
+선택지는 두 가지입니다.
+
+1. **HDD를 옮기기**: 데이터 HDD 두 개와 Jenkins agent를 다른 PC(또는 미니 PC)로 옮깁니다. 저장소 공간이 그대로 인식되므로, 공유 폴더와 agent만 다시 설정하면 됩니다.
+2. **함께 쓰기**: 가능은 하지만, 분석 job이 돌 때 직원의 작업이 느려지고 공유 폴더가 개인 업무 PC에 있게 되어 권한 관리가 애매해집니다. 잠깐이라면 괜찮지만 장기적으로는 1번을 권합니다.
+
+지금 단계에서 해 두면 좋은 것은 **설정 과정을 저장소의 README나 PowerShell 스크립트로 남겨 두는 것**입니다. 공유 폴더 생성, agent 설치, 가상환경 구성 순서가 기록돼 있으면, 어느 PC로 옮기든 한 시간 안에 같은 환경을 다시 만들 수 있습니다.
+
+## 참고: S3로 넘어가는 시점
+
+엣지 PC가 호우 이벤트 때 영상을 자동으로 업로드하게 만들거나, 외부(현장, 협력사)에서 접근해야 할 때가 오면 그때 S3 방식(SeaweedFS)으로 넘어가면 됩니다. 폴더 구조를 `site/event/camera`로 미리 맞춰 두면, 나중에 그대로 버킷으로 옮길 수 있습니다.
+
+원하시면 공유 폴더, 저장소 공간 미러, Jenkins agent 설치를 한 번에 해 주는 PowerShell 설정 스크립트 초안을 만들어 드릴게요.
