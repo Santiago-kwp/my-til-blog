@@ -97,4 +97,4 @@ threads = [threading.Thread(target=withdraw2, args=(100,)) for _ in range(10)]
 for t in threads: t.start()
 for t in threads: t.join()
 
-print(balance)
+print(balance) # 결과 0

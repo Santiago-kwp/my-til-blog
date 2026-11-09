@@ -281,3 +281,277 @@ class BoundedBuffer:
 
 아무도 깨우지 않았는데(심지어 OS 수준의 이유 없는 신호로 인해) 스레드가 혼자 갑자기 잠에서 깨어나는 현상을 말함
 OS와 하드웨어 설계상 극히 드물게 발생할 수 있는데, 이때 `while`문으로 조건을 다시 검사하게 해 두지 않으면, 아무런 조건도 충족되지 않았는데 혼자서 깨어나서 엉뚱한 코드를 실행하게 됨.
+
+### 2.4 Semaphore: 동시 실행 개수 제한
+
+> 세마포어를 비유적으로 설명한다면 **열쇠가 여러 개 걸려있는 화장실**
+
+
+```python
+api_slots = threading.BoundedSemaphore(3)
+
+def call_external_api(x):
+    with api_slots:     # 최대 3개 스레드만 동시에 진입
+        return requests.get(...)
+```
+
+- 일반 락(Lock):
+    - 화장실 칸이 딱 1개
+    - 열쇠도 1개뿐이라, 오직 1명만 들어갈 수 있음
+- 세마포어(Semaphore):
+    - 화장실 칸이 3개
+    - 벽에 걸린 열쇠도 3개
+    - 사람이 올 때마다 열쇠를 하나씩 집어 들고 들어감 (남은 열쇠: 3 $\rarr$ 2 $\rarr$ 1 $\rarr$ 0 )
+    - 열쇠가 0개가 되면, 4번째 사람부터는 **앞사람이 나와서 열쇠를 걸어둘 때까지 줄을 서서 기다려야(대기) 함**
+    - 안에서 볼일을 다 본 사람이 나와서 열쇠를 제자리에 걸어두면(`release`), 기다리던 다른 사람이 그 열쇠를 쥐고 들어감
+
+#### 세마포어를 왜 쓰는가?
+
+스레드를 쓰면 네트워크 요청이나 파일 다운로드 같은 I/O 작업을 빠르게 처리할 수 있음. 하지만, 스레드를 여러 개 띄워서 외부 API를 동시에 여러 번 호출하는 경우 다음과 같은 문제가 생길 수 있다.
+
+1. 상대방 서버의 차단 (DDoS 오인 / Rate Limit):
+외부 서버(OpenAI, 구글, 결제사 등)에 1초에 1,000개의 요청을 쏟아부으면, 상대 서버는 디도스 공격으로 간주하고 우리 IP를 차단하거나 `429 Too Many Requests` 에러를 냄
+2. 소켓 및 메모리 고갈
+컴퓨터가 한 번에 열 수 있는 네트워크 연결(Socket) 수와 메모리에는 한계가 있어서 우리 서버 자체가 뻗어버림
+3. DB 커넥션 풀 고사
+DB는 보통 동시에 붙을 수 있는 최대 연결 수(예: 20 ~ 30개)가 정해져 있는데, 100개의 스레드가 동시에 쿼리를 날리면 DB 커넥션 에러를 내며 멈춤
+
+> 이때 세마포어를 쓰면 **스레드는 100개, 1000개를 자유롭게 띄우되, 실제로 병목이 생기는 위험 구간(임계 자원)에는 딱 N개씩만 순서대로 들어가라** 고 안전 밸브를 달아줄 수 있다.
+
+#### 세마포어 활용 사례
+
+1. 외부 API 호출 속도 조절(Rate Limiting)
+
+```python
+api_slots = threading.BoundedSemaphore(5) # 무료 티어라 초당 최대 5개 동시 호출만 지원
+
+def fetch_data(url):
+    with api_slots: # 6 번째 스레드는 앞선 5개 중 하나가 끝날 때까지 얌전히 대기
+        return requests.get(url)
+```
+
+2. 웹 스크래핑/크롤러 (타겟 사이트 부하 방지)
+
+수 만 개의 웹페이지를 긁어와야 할 때, 너무 빠르게 긁으면 타겟 서버가 마비되거나 내 IP가 밴(Ban)당함. 동시 접속자수를 3~5명 수준으로 제한할 때 씀
+
+3. 제한된 리소스 풀(Pool) 접근 관리
+- 회사 내부의 GPU 머신이 2장밖에 없을 때: `BoundedSemaphore(2)`로 감싸서 최대 2개의 학습 스레드만 GPU를 점유하도록 제어
+- 라이선스가 3개뿐인 고가의 상용 소프트웨어를 호출 할 때: `BoundedSemaphore(3)` 적용
+
+4. 대용량 파일 다운로더
+100개의 파일을 받아야 하는데 100개를 동시에 받으면 네트워크 대역폭이 쪼개져서 전체가 다 느려짐. 세마포어로 3~4개씩 끊어서 안정적으로 다운로드할 때 유용
+
+#### Semaphore vs BoundedSemaphore
+
+- 일반 `Semaphore`: 실수로 `release()`를 집어간 횟수보다 더 많이 호출하면, 원래 3개였던 열쇠가 4개, 5개로 영구히 불어나 버리는 심각한 버그가 생김
+- `BoundedSemaphore`: 처음에 정해준 최대치(3개)보다 더 많이 `release()`하려고 하면 `ValueError` 예외 발생시켜 버그를 잡을 수 있음.
+
+
+
+## 3. 세분화된 락
+```python
+import threading
+from dataclasses import dataclass, field
+
+class InsufficientFunds(Exception):
+    raise ValueError
+
+class AccountNotFound(Exception):
+    raise KeyError
+
+
+
+@dataclass
+class Account:
+    id: str
+    balance: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+class BankService:
+    def __init__(self):
+        self._accounts: dict[str, Account] = {}
+        self._registry_lock = threading.Lock() # 계좌 "목록" 보호용
+
+    # 계좌 생성
+    def create(self, aid: str, initial: int = 0) -> None:
+        with self._registry_lock:
+            if aid in self._accounts:
+                raise ValueError("duplicate")
+            self._accounts[aid] = Account(aid, initial)
+
+    # 계좌 조회
+    def _get(self, aid: str) -> Account:
+        acc = self._accounts.get(aid)
+        if acc is None:
+            raise AccountNotFound(aid)
+        return acc
+
+    # 계좌 출금
+    def withdraw(self, aid: str, amount:int) -> None:
+        acc = self._get(aid)
+        with acc.lock:  # 이 계좌만 잠금
+            if acc.balance < amount:
+                raise InsufficientFunds(aid)
+            acc.balance -= amount
+
+    # 계좌 이체
+    def transfer(self, src: str, dest: str, amount:int) -> None:
+        if src == dst:
+            raise ValueError("same amount")
+        
+        a = self._get(src)
+        b = self.get(dest)
+
+        # 교착 상태 방지: 항상 같은 순서(id 오름차순)로 락 획득
+        first, second = sorted((a, b), key=lambda x: x.id)
+        with fisrt.lock, second.lock:
+            if a.balance < amount:
+                raise InsufficientFunds(aid)
+            a.balance -= amount
+            b.balance += amount
+
+
+```
+
+### 정렬을 안하면 생기는 일(교착상태):
+- 스레드 1: transfer(A->B) A락 획득 -> B락 대기 ...
+- 스레드 2: transfer(B->A) B락 획득 -> A락 대기 ...
+- 서로 상대가 가진 락을 영원히 기다림
+- 교착상태 4가지 필요조건 : 상호배제, 점유와 대기, 비선점, 순환대기. 
+- 락 순서 정렬은 순환 대기를 깨는 방법
+- `acqure(timeout=...)` 후 포기하고 재시도하는 건 점유와 대기를 깨는 방법
+
+### 사용자 ID 같은 임의 키별 락이 필요할 때
+
+#### 왜 필요한가?
+> 만약 전 세계 유저가 1,000만 명인데, `user_service_lock = threading.Lock()` 하나로 모든 유저의 요청을 처리한다고 가정하자
+
+- `user_1`이 닉네임을 변경하는 0.1초 동안, 지구 반대편에 있는 아무 상관없는 `user_9999`는 프로필 사진도 못 바꾸고 대기해야 함. 전체 서비스 처리량(Throughput)이 바닥을 침
+- 그렇다고 락을 아예 안 걸면, `user_1`이 동시에 폰과 PC에서 결제 버튼을 눌렀을 때 중복 결제(Race condition)가 발생함.
+- 즉, 서로 다른 사용자(키)끼리는 동시에 병렬 처리되어야 하지만, '같은 사용자(키)'에 대한 동시 요청은 줄을 세워야 한다.
+
+사용 사례
+1. 중복 결제/주문 방지: 동일 유저(`user_id`)가 따닥(더블 클릭)을 눌렀을 때 혹은 다른 PC나 다른 기기로 로그인 후 동시에 결제 버튼을 눌렀을 때 1번만 결제되도록 할 때
+2. 좌석 예매 시스템: 좌석 번호(`seat_id`)별로 락을 걸어, A구역 1번을 예매하는 사람과 B구역 5번을 예매하는 사람은 서로 방해받지 않게 할 때.
+3. 캐시 스탬피드(Cache Stampede) 방지: 여러 스레드가 동시에 캐시가 만료된 특정 상품(`item_id`)을 조회할 때, 딱 1개 스레드만 DB에 다녀와서 캐시를 채우고 나머지는 기다리게 할 때.
+    (※ 서버가 여러 대인 분산 환경에서는 이를 `threading.Lock` 대신 `Redis 분산 락`으로 키별 락을 구현합니다.)
+
+```python
+from collections import defaultdict
+
+class KeyedLocks:
+    def __init__(self):
+        self._locks: dict[str, threading.Lock] = defaultdict(threading.Lock)
+        self._gaurd = threading.Lock() # 락 딕셔너리 자체도 공유 상태다
+
+    def get(self, key: str) -> threading.Lock:
+        with self._guard:
+            return self._locks[key]
+```
+
+- "락을 담는 dict도 동시에 수정되니 그걸 보호하는 락이 또 필요하다"
+- 이러면 유저가 만약 1억 명이 접속할 때마다 `_locks` 딕셔너리에 락 객체가 1억 개나 생성된다.
+- 한 번 가입하고 다신 안 오는 탈퇴 회원용 락까지 메모리에 영원히 남아 **메모리 누수(OOM, Out Of Memory)** 가 난다.
+- 그리고 "키가 무한히 늘면 메모리 누수 -> 고정 개수 버킷으로 해싱하는 lock striping(`locks[hash(key) % N]`)으로 해결 가능하다.
+
+#### Lock Striping (락 스트라이핑)
+> 핵심 아이디어: 유저가 1억명이어도, 락은 딱 64개만 미리 만들어 두고 나눠 쓰자!
+
+1. 서버가 뜰 때 고정된 크기(예: 64개)의 락 리스트(버킷)을 만듦
+
+```python
+NUM_BUCKETS = 64
+self._buckets = [threading.Lock() for _ in range(NUM_BUCKETS)]
+```
+
+2. 사용자 ID(`key`)가 들어오면, 파이썬 내장 해시 함수를 돌려 `0 ~ 63` 사이의 숫자로 변환함
+```python
+bucket_index = hash(key) % NUM_BUCKETS
+lock_to_use = self._buckets[bucket_index]
+```
+
+3. 그 인덱스에 해당하는 락을 꺼내서 씀
+```
+[유저 ID]                 [해시 계산]            [64개의 락 버킷]
+"user_alice"   -->  hash() % 64 = 12   -->  _buckets[12] 락 사용
+"user_bob"     -->  hash() % 64 = 45   -->  _buckets[45] 락 사용
+"user_charlie" -->  hash() % 64 = 12   -->  _buckets[12] 락 사용 (우연히 겹침)
+```
+
+- 장점: 메모리 완벽 통제 가능 - 유저가 1명이어도, 10억 명이어도, 메모리에는 정확히 64개의 Lock 객체만 존재하므로 메모리 누수가 100% 방지됨.
+- 단점: 해시 충돌: 아주 낮은 확률로 위와 같이 `alice`와 `charlie`가 우연히 같은 12번 락을 배정받을 수 있음. 하지만 64개 정도로 쪼개두면 충돌 확률이 낮아서, 단일 락을 쓸 때보다 동시 처리 성능이 수십 배 향상됨. (Java의 고성능 `ConcurrentHashMap`도 내부적으로 이 방식을 씀)
+
+## 4. 읽기-쓰기 락 (RW Lock)
+파이썬 표준 라이브러리에는 RW 락이 없어서, `Condition`으로 직접 만들 수도 있다.
+
+```python
+class RWLock:
+    def __init__(self):
+        self._cond = threading.Condition()
+        self._readers = 0       # 현재 데이터를 읽고 있는 스레드의 수(카운터)
+        self._writer = False    # 현재 데이터를 쓰고 있는 스레드가 있는지 여부(T/F)
+
+    @contextmanager
+    def read(self):
+        with self._cond:
+            while self._writer:
+                self._cond.wait() # 누가 쓰고 있으면 대기
+            self._readers += 1  # 누가 쓰고 있지만 않으면, 10명이든 1,000명이든 그냥 통과 (동시 읽기 허용)
+        try:
+            yield   # 읽기 수행
+        finally:
+            with self._cond:
+                self._readers -= 1
+                if self._readers == 0: # 마지막으로 나가는 읽기 스레드라면 기다리고 있을 쓰기 스레드 깨우기
+                    self._cond.notify_all()
+
+    @contextmanager
+    def write(self):
+        with self._cond:
+            while self._writer or self._readers > 0: # 아무도 쓰지 않고, 읽지 않아야 들어갈 수 있음
+                self._cond.wait()
+            self._writer = True # 문 잠그기
+        try:
+            yield # 데이터 쓰기
+        finally:
+            with self._cond:
+                self._writer = False # 다 썼으면 문 열고 밖에서 기다리던 읽기/쓰기 스레드에게 노티
+                self._cond.notify_all()
+
+# 사용
+rw = RWLock()
+with rw.read(): ... # 여러 스레드 동시 진입 가능
+with rw.write(): ... # 단독 진입
+```
+
+### 한계
+- 위의 구현은 읽기 선호라 읽기가 계속 들어오면 쓰기가 영원히 못 들어가는 writer starvation이 생길 수 있음
+- 해결 방안은 "대기 중인 writer가 있으면 새 reader를 막는" 방식
+- 파이썬에서는 GIL 때문에 읽기 병렬화 이득이 작아서, 실제로는 측정 후 도입하는게 좋음
+
+### 해결책: 공평한 RWLock (Fair RWLock / Writer-preference)
+- writer starvation을 해결하려면 **"대기실에서 기다리고 있는 Writer가 몇 명인지"** 를 세는 변수(`self._waiting_writers`)를 추가해야 함.
+
+```python
+# read() 의 진입 조건을 다음과 같이 바꾼다.
+while self._writer or self._waiting_writers > 0:
+    self._cond.wait()
+```
+
+- 이렇게 하면, 누군가 쓰려고 대기실에 줄을 서는 순간 뒤이어 도착하는 신규 Reader들의 진입을 차단하여, 기존 Reader들이 다 빠져나간 뒤 Writer가 우선적으로 들어갈 수 있게 보장해줌.
+
+### 파이썬의 한계
+- C++나 Java에서는 `RWLock`을 쓰면 성능이 많이 올라감. 왜냐하면 CPU 코어 8개가 진짜로 동시에 데이터를 읽기 때문
+- 하지만 파이썬(CPython with GIL)은 다름.
+    - `RWLock`으로 스레드 100개가 동시에 `read()` 구간에 들어갔다고 치자.
+    - 하지만 GIL(Global Interpreter Lock) 때문에, 물리적인 CPU 코어에서는 여전히 바이트코드가 한 번에 딱 1스레드만 돌아감
+    - 즉, 진정한 의미의 "동시 병렬 CPU 읽기"가 발생하지 않음
+    - 오히려 `Condition`, `wait()`, `notify_all()`을 거치면서 **컨텍스트 스위칭 오버헤드**가 그냥 일반 `Lock()` 1개 썼을 때보다 더 커져서 시스템이 더 느려질 수도 있음
+- Python 3.13부터 GIL을 없애는 Free-threaded 빌드가 도입되면 C++/Java 처럼 Python도 멀티코어를 100% 활용할 수는 있음
+
+
+### 언제 써야할까?
+1. 읽기 작업 내부에서 GIL이 풀릴 때:
+    - 읽는 로직이 순수 파이썬 계산이 아니라, C 확장 모듈(Numpy, Pandas, 암호화 연산 등)을 호출하거나 I/O(네트워크/디스크 읽기) 작업이라서 GIL을 스스로 내려놓을 때 (이때는 진짜 멀티코어로 병렬 읽기가 됨)
+2. 읽는 시간이 엄청나게 길 때:
+    - 읽는 작업 한 번에 1초씩 걸린다면, 일반 `Lock`을 썼을 때 다른 읽기 스레드들이 1초씩 밀리게 됨. 이럴 때는 GIL 오버헤드를 감수하더라도 `RWLock`으로 동시에 진입시키는게 나음,.
