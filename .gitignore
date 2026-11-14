@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 opencv-python-learn/BarrelDistortion/*/*.jpg
 .DS_Store
+
+personal-stuff/
